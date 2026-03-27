@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/YOUR_USERNAME/tiktokfree-bot
-// @version      1.0.2
+// @version      1.0.2454545
 // @description  Автоматическое выполнение заданий на tiktop-free.com
 // @author       YOUR_NAME
 // @match        https://tiktop-free.com/tasks/*
