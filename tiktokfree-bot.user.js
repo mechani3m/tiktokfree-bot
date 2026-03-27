@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      3.0.1
-// @description  Простой бот: открыть TikTok -> найти кнопку -> вебхук -> закрыть -> проверить
+// @version      3.1.0
+// @description  Простой бот: открыть TikTok -> найти кнопку -> вебхук -> закрыть через 15 сек -> проверить
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -28,12 +28,13 @@
     // ========== НАСТРОЙКИ ==========
     const SETTINGS = {
         webhookUrl: GM_getValue('webhookUrl', 'https://trigger.macrodroid.com/e4e9515c-9214-454b-83c2-f81eb88e356d'),
-        waitBeforeClose: 15000  // ждать 3 секунды перед закрытием
+        waitBeforeClose: 15000  // ЖДЕМ 15 СЕКУНД перед закрытием
     };
     
     // ========== TIKTOK - ТОЛЬКО ПОИСК КНОПКИ И ВЕБХУК ==========
     if (isTikTok) {
         console.log('🎯 TikTok Bot запущен (только поиск кнопки)');
+        console.log(`⏳ Будет ждать ${SETTINGS.waitBeforeClose / 1000} секунд перед закрытием`);
         
         // Селекторы кнопки подписки
         const selectors = [
@@ -103,11 +104,33 @@
             });
         }
         
-        // Ждем и закрываем вкладку (без нажатия каких-либо кнопок)
-        setTimeout(() => {
-            console.log('🔚 Закрываю вкладку');
-            window.close();
-        }, SETTINGS.waitBeforeClose);
+        // Создаем таймер обратного отсчета
+        let secondsLeft = SETTINGS.waitBeforeClose / 1000;
+        const timerDiv = document.createElement('div');
+        timerDiv.style.cssText = `
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            z-index: 9999;
+            background: rgba(0,0,0,0.8);
+            color: #ffaa00;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: monospace;
+            font-weight: bold;
+        `;
+        timerDiv.innerHTML = `⏳ Закрытие через: ${secondsLeft} сек`;
+        document.body.appendChild(timerDiv);
+        
+        const timerInterval = setInterval(() => {
+            secondsLeft--;
+            timerDiv.innerHTML = `⏳ Закрытие через: ${secondsLeft} сек`;
+            if (secondsLeft <= 0) {
+                clearInterval(timerInterval);
+                timerDiv.remove();
+            }
+        }, 1000);
         
         // Визуальный индикатор (чтобы было видно что скрипт работает)
         const indicator = document.createElement('div');
@@ -126,8 +149,12 @@
         indicator.innerHTML = '🤖 Bot: ' + (button ? '✅ Кнопка найдена' : '❌ Кнопка не найдена');
         document.body.appendChild(indicator);
         
-        // Убираем индикатор через 3 секунды
-        setTimeout(() => indicator.remove(), 3000);
+        // ЖДЕМ 15 СЕКУНД и закрываем вкладку
+        setTimeout(() => {
+            console.log('🔚 Закрываю вкладку через 15 секунд');
+            indicator.remove();
+            window.close();
+        }, SETTINGS.waitBeforeClose);
         
         return;
     }
@@ -200,7 +227,7 @@
             window.open(url, '_blank');
         }
         
-        // Нажать "Проверить"
+        // Нажать "Проверить" - правильный селектор
         async function clickCheck(task) {
             const formData = new FormData();
             formData.append('UserPerformTask[id]', task.id);
@@ -257,11 +284,24 @@
                         clearInterval(checkInterval);
                         console.log('👀 Возврат на сайт, проверяю...');
                         
-                        const task = getTask();
-                        if (task) {
-                            const success = await clickCheck(task);
-                            resolve(success);
+                        // Ищем кнопку "Проверить" по правильному селектору
+                        const checkBtn = document.querySelector('.btn--check');
+                        if (checkBtn) {
+                            console.log('✅ Найдена кнопка "Проверить", нажимаю...');
+                            checkBtn.click();
+                            
+                            // Ждем немного и проверяем результат
+                            setTimeout(async () => {
+                                const task = getTask();
+                                if (task) {
+                                    const success = await clickCheck(task);
+                                    resolve(success);
+                                } else {
+                                    resolve(false);
+                                }
+                            }, 2000);
                         } else {
+                            console.log('❌ Кнопка "Проверить" не найдена');
                             resolve(false);
                         }
                     }
