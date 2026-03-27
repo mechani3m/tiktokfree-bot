@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot + TikTok Subscriber
 // @namespace    https://github.com/YOUR_USERNAME/tiktokfree-bot
-// @version      2.0.0
-// @description  Автоматическое выполнение заданий на tiktop-free.com + поиск кнопки подписки в TikTok
+// @version      2.1.0
+// @description  Автоматическое выполнение заданий на tiktop-free.com + поиск и нажатие кнопки подписки в TikTok
 // @author       YOUR_NAME
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -16,8 +16,8 @@
 // @grant        GM_registerMenuCommand
 // @connect      trigger.macrodroid.com
 // @connect      raw.githubusercontent.com
-// @downloadURL  https://raw.githubusercontent.com/mechani3m/tiktokfree-bot/main/tiktokfree-bot.user.js
-// @updateURL    https://raw.githubusercontent.com/mechani3m/tiktokfree-bot/main/tiktokfree-bot.user.js
+// @downloadURL  https://raw.githubusercontent.com/YOUR_USERNAME/tiktokfree-bot/main/tiktokfree-bot.user.js
+// @updateURL    https://raw.githubusercontent.com/YOUR_USERNAME/tiktokfree-bot/main/tiktokfree-bot.user.js
 // @run-at       document-end
 // ==/UserScript==
 
@@ -35,8 +35,9 @@
         checkDelay: 3000,
         maxTasksPerSession: GM_getValue('maxTasks', 100),
         soundOnComplete: GM_getValue('sound', true),
-        autoCloseTab: GM_getValue('autoCloseTab', true),      // Закрывать вкладку TikTok
-        waitBeforeClose: GM_getValue('waitBeforeClose', 10000), // Ждать 10 сек перед закрытием
+        autoCloseTab: GM_getValue('autoCloseTab', true),
+        waitBeforeClose: GM_getValue('waitBeforeClose', 10000),
+        autoClickButton: GM_getValue('autoClickButton', true),
         
         selectors: {
             taskWrapper: '.task-item--wrapper',
@@ -47,7 +48,6 @@
             balance: '.user-balance'
         },
         
-        // Селекторы для TikTok
         tiktokSelectors: {
             follow: [
                 '[data-e2e="follow-button"]',
@@ -56,60 +56,157 @@
                 'button[class*="follow"]',
                 'div[data-e2e="follow-button"] button',
                 '[class*="FollowButton"] button',
-                'button[class*="FollowButton"]'
+                'button[class*="FollowButton"]',
+                'button:has(span:contains("Подписаться"))'
             ],
             like: [
                 '[data-e2e="like-button"]',
                 'button[aria-label*="Нравится"]',
                 'button[aria-label*="Like"]',
-                'span[data-e2e="like-icon"]'
+                'span[data-e2e="like-icon"]',
+                'button[class*="like"]'
             ]
         }
     };
     
-    // ========== TIKTOK СКРИПТ (поиск кнопки подписки) ==========
+    // ========== TIKTOK СКРИПТ ==========
     if (isTikTok) {
-        console.log('%c🎯 TikTok Auto Bot v2.0 запущен', 'color: #00ff00; font-size: 14px');
+        console.log('%c🎯 TikTok Auto Bot v2.1 запущен', 'color: #00ff00; font-size: 14px');
         console.log('📍 Сайт: TikTok');
+        console.log('📍 URL:', window.location.href);
         
-        // Функция поиска кнопки
-        function findFollowButton() {
-            console.log('🔍 Ищем кнопку подписки...');
-            
-            // По селекторам
-            for (const selector of CONFIG.tiktokSelectors.follow) {
-                try {
-                    const btn = document.querySelector(selector);
-                    if (btn && btn.offsetParent !== null) {
-                        console.log(`✅ Найдена кнопка по селектору: ${selector}`);
-                        return btn;
+        // Генерируем ID задачи
+        const taskId = Date.now().toString();
+        
+        // Функция ожидания загрузки страницы
+        function waitForPageLoad() {
+            return new Promise((resolve) => {
+                if (document.readyState === 'complete') {
+                    resolve();
+                } else {
+                    window.addEventListener('load', resolve);
+                }
+            });
+        }
+        
+        // Функция ожидания появления элемента
+        function waitForElement(selectors, timeout = 10000) {
+            return new Promise((resolve) => {
+                const startTime = Date.now();
+                
+                function check() {
+                    for (const selector of selectors) {
+                        try {
+                            const element = document.querySelector(selector);
+                            if (element && element.offsetParent !== null) {
+                                resolve(element);
+                                return;
+                            }
+                        } catch(e) {}
                     }
-                } catch(e) {}
+                    
+                    if (Date.now() - startTime > timeout) {
+                        resolve(null);
+                        return;
+                    }
+                    
+                    setTimeout(check, 500);
+                }
+                
+                check();
+            });
+        }
+        
+        // Функция поиска кнопки с ожиданием
+        async function findButtonWithWait(type) {
+            const selectors = type === 'follow' ? CONFIG.tiktokSelectors.follow : CONFIG.tiktokSelectors.like;
+            console.log(`🔍 Ожидаю появление кнопки ${type}...`);
+            
+            const button = await waitForElement(selectors, 10000);
+            
+            if (button) {
+                console.log(`✅ Найдена кнопка ${type}:`, button);
+                return button;
             }
             
-            // По тексту
-            const buttons = document.querySelectorAll('button');
-            for (const btn of buttons) {
+            // Альтернативный поиск по тексту
+            const allButtons = document.querySelectorAll('button');
+            for (const btn of allButtons) {
                 const text = btn.innerText?.toLowerCase() || '';
-                if (text.includes('подписаться') || text.includes('follow')) {
+                if (type === 'follow' && (text.includes('подписаться') || text.includes('follow'))) {
+                    console.log(`✅ Найдена кнопка по тексту: "${btn.innerText}"`);
+                    return btn;
+                }
+                if (type === 'like' && (text.includes('нравится') || text.includes('like'))) {
                     console.log(`✅ Найдена кнопка по тексту: "${btn.innerText}"`);
                     return btn;
                 }
             }
             
-            console.log('❌ Кнопка подписки не найдена');
+            console.log(`❌ Кнопка ${type} не найдена за 10 секунд`);
             return null;
         }
         
-        // Функция поиска кнопки лайка
-        function findLikeButton() {
-            for (const selector of CONFIG.tiktokSelectors.like) {
+        // Функция отправки вебхука (с ожиданием ответа)
+        function sendWebhook(action, data = {}) {
+            return new Promise((resolve) => {
+                const url = CONFIG.webhookUrl + action;
+                console.log(`📡 Отправка вебхука: ${action}`);
+                console.log(`📡 URL: ${url}`);
+                console.log(`📡 Данные:`, data);
+                
+                GM_xmlhttpRequest({
+                    method: 'POST',
+                    url: url,
+                    headers: { 'Content-Type': 'application/json' },
+                    data: JSON.stringify({
+                        timestamp: new Date().toISOString(),
+                        url: window.location.href,
+                        taskId: taskId,
+                        action: action,
+                        ...data
+                    }),
+                    onload: function(response) {
+                        console.log(`✅ Вебхук ${action} отправлен, статус: ${response.status}`);
+                        resolve(true);
+                    },
+                    onerror: function(error) {
+                        console.log(`⚠️ Ошибка отправки вебхука ${action}:`, error);
+                        resolve(false);
+                    }
+                });
+            });
+        }
+        
+        // Функция уведомления основного скрипта
+        function notifyMainScript() {
+            console.log('🔔 Отправляем сигнал основному скрипту...');
+            
+            // Отправляем вебхук о завершении
+            sendWebhook('/task_completed', {
+                taskId: taskId,
+                message: 'Задание выполнено, можно проверять'
+            });
+            
+            // Сохраняем в localStorage
+            localStorage.setItem('tikbot_task_completed', 'true');
+            localStorage.setItem('tikbot_task_id', taskId);
+            localStorage.setItem('tikbot_completed_time', Date.now());
+            
+            // Отправляем сообщение родительской вкладке
+            if (window.opener && !window.opener.closed) {
                 try {
-                    const btn = document.querySelector(selector);
-                    if (btn) return btn;
-                } catch(e) {}
+                    window.opener.postMessage({
+                        type: 'TIKTOK_TASK_COMPLETED',
+                        taskId: taskId,
+                        timestamp: Date.now(),
+                        source: 'tiktok-bot'
+                    }, 'https://tiktop-free.com');
+                    console.log('✅ Сообщение отправлено родительской вкладке');
+                } catch(e) {
+                    console.log('⚠️ Не удалось отправить postMessage:', e);
+                }
             }
-            return null;
         }
         
         // Определяем тип страницы
@@ -117,115 +214,151 @@
                               window.location.pathname.includes('/user/');
         const isVideoPage = window.location.pathname.includes('/video/');
         
-        // Функция отправки вебхука
-        function sendWebhook(action, data = {}) {
-            const url = CONFIG.webhookUrl + action;
-            console.log(`📡 Отправка вебхука: ${action}`);
-            
-            GM_xmlhttpRequest({
-                method: 'POST',
-                url: url,
-                headers: { 'Content-Type': 'application/json' },
-                data: JSON.stringify({
-                    timestamp: new Date().toISOString(),
-                    url: window.location.href,
-                    pageType: isProfilePage ? 'profile' : (isVideoPage ? 'video' : 'unknown'),
-                    action: action,
-                    ...data
-                })
-            });
-        }
-        
-        // Основная логика
+        // Основная функция
         async function runTikTokBot() {
-            console.log('🎬 Анализ страницы TikTok...');
+            console.log('🎬 Ожидаем полную загрузку страницы...');
             
-            // Ждем загрузки
+            // Ждем полной загрузки страницы
+            await waitForPageLoad();
+            console.log('✅ Страница полностью загружена');
+            
+            // Дополнительная задержка для динамического контента
             await new Promise(r => setTimeout(r, 2000));
+            console.log('✅ Дополнительная задержка завершена');
             
             let button = null;
             let action = '';
+            let buttonFound = false;
             
             if (isProfilePage) {
-                // Страница профиля - ищем кнопку подписки
-                button = findFollowButton();
                 action = 'follow';
-                console.log('📱 Страница профиля - ищем подписку');
+                console.log('📱 Определен тип: СТРАНИЦА ПРОФИЛЯ - ищем кнопку подписки');
+                button = await findButtonWithWait('follow');
+                if (button) buttonFound = true;
+                
             } else if (isVideoPage) {
-                // Страница видео - ищем кнопку лайка
-                button = findLikeButton();
                 action = 'like';
-                console.log('📱 Страница видео - ищем лайк');
+                console.log('📱 Определен тип: СТРАНИЦА ВИДЕО - ищем кнопку лайка');
+                button = await findButtonWithWait('like');
+                if (button) buttonFound = true;
+                
             } else {
                 console.log('⚠️ Неизвестный тип страницы');
-                sendWebhook('/unknown', { url: window.location.href });
+                await sendWebhook('/unknown_page', { url: window.location.href });
             }
             
-            if (button) {
+            // ОТПРАВЛЯЕМ ВЕБХУК С РЕЗУЛЬТАТОМ ПОИСКА
+            await sendWebhook(`/${action}_search`, {
+                found: buttonFound,
+                pageType: isProfilePage ? 'profile' : (isVideoPage ? 'video' : 'unknown'),
+                url: window.location.href,
+                timestamp: Date.now()
+            });
+            
+            if (button && buttonFound) {
                 console.log(`🎯 Кнопка ${action} найдена!`);
                 
-                // Отправляем вебхук
-                sendWebhook(`/${action}`, {
-                    found: true,
-                    buttonText: button.innerText,
-                    url: window.location.href
+                // Отправляем вебхук о том, что кнопка найдена
+                await sendWebhook(`/${action}_found`, {
+                    buttonText: button.innerText || button.textContent || 'неизвестно',
+                    buttonHtml: button.outerHTML.substring(0, 200)
                 });
                 
-                // Опционально: нажимаем кнопку
-                // button.click();
-                // console.log(`✅ Кнопка ${action} нажата автоматически`);
+                // Нажимаем кнопку (если включено в настройках)
+                if (CONFIG.autoClickButton) {
+                    console.log(`🤖 Автоматически нажимаю кнопку ${action}...`);
+                    button.click();
+                    console.log(`✅ Кнопка ${action} нажата!`);
+                    
+                    // Отправляем вебхук о нажатии
+                    await sendWebhook(`/${action}_clicked`, {
+                        success: true,
+                        timestamp: Date.now()
+                    });
+                } else {
+                    console.log(`⚠️ Автонажатие отключено, кнопка не нажата`);
+                    await sendWebhook(`/${action}_not_clicked`, {
+                        reason: 'autoClickButton disabled'
+                    });
+                }
                 
             } else {
-                console.log(`⚠️ Кнопка ${action} не найдена`);
-                sendWebhook(`/${action}`, { found: false });
+                console.log(`⚠️ Кнопка ${action} НЕ найдена`);
+                await sendWebhook(`/${action}_not_found`, {
+                    url: window.location.href,
+                    reason: 'button not found after wait'
+                });
             }
             
-            // Ждем перед закрытием вкладки
+            // Ждем перед закрытием
+            console.log(`⏳ Ждем ${CONFIG.waitBeforeClose / 1000} секунд перед закрытием...`);
+            await new Promise(r => setTimeout(r, CONFIG.waitBeforeClose));
+            
+            // ОТПРАВЛЯЕМ ФИНАЛЬНЫЙ ВЕБХУК О ЗАВЕРШЕНИИ
+            await sendWebhook('/task_completed', {
+                action: action,
+                buttonFound: buttonFound,
+                buttonClicked: buttonFound && CONFIG.autoClickButton,
+                waitTime: CONFIG.waitBeforeClose,
+                timestamp: Date.now()
+            });
+            
+            // Уведомляем основной скрипт
+            notifyMainScript();
+            
+            // Закрываем вкладку
             if (CONFIG.autoCloseTab) {
-                console.log(`⏳ Ждем ${CONFIG.waitBeforeClose / 1000} секунд перед закрытием...`);
-                await new Promise(r => setTimeout(r, CONFIG.waitBeforeClose));
-                console.log('🔚 Закрываю вкладку...');
+                console.log('🔚 Закрываю вкладку через 1 секунду...');
+                await new Promise(r => setTimeout(r, 1000));
                 window.close();
             } else {
                 console.log('💡 Вкладка не закрыта (autoCloseTab = false)');
+                // Перенаправляем обратно на сайт
+                window.location.href = 'https://tiktop-free.com/tasks/';
             }
         }
         
-        // Запускаем через 1 секунду после загрузки
-        setTimeout(runTikTokBot, 1000);
+        // Запускаем скрипт
+        runTikTokBot();
         
-        // Добавляем кнопку в интерфейс TikTok (для отладки)
-        const controlPanel = document.createElement('div');
-        controlPanel.style.cssText = `
+        // Добавляем визуальный индикатор
+        const indicator = document.createElement('div');
+        indicator.style.cssText = `
             position: fixed;
             bottom: 20px;
             left: 20px;
             z-index: 9999;
-            background: #000000cc;
-            color: white;
-            padding: 8px 12px;
-            border-radius: 8px;
+            background: linear-gradient(135deg, #00ff00, #009900);
+            color: black;
+            padding: 8px 16px;
+            border-radius: 20px;
             font-size: 12px;
             font-family: monospace;
+            font-weight: bold;
             cursor: pointer;
-            backdrop-filter: blur(5px);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            animation: pulse 1s infinite;
         `;
-        controlPanel.innerHTML = '🤖 TikTok Bot Active';
-        controlPanel.onclick = () => {
-            console.log('Bot stats:', {
-                url: window.location.href,
-                isProfile: isProfilePage,
-                isVideo: isVideoPage
-            });
-        };
-        document.body.appendChild(controlPanel);
+        indicator.innerHTML = '🤖 TikTok Bot ACTIVE<br>🔄 Автонажатие включено';
+        document.body.appendChild(indicator);
         
-        return; // Останавливаем выполнение, чтобы не запускать код для TikTopFree
+        // Добавляем стиль анимации
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes pulse {
+                0% { opacity: 1; }
+                50% { opacity: 0.7; }
+                100% { opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        return; // Останавливаем выполнение
     }
     
-    // ========== TIKTOPFREE СКРИПТ (основной бот) ==========
+    // ========== TIKTOPFREE СКРИПТ ==========
     if (isTikTopFree) {
-        console.log('%c🤖 TikTokFree Bot v2.0 загружен', 'color: #00ff00; font-size: 14px');
+        console.log('%c🤖 TikTokFree Bot v2.1 загружен', 'color: #00ff00; font-size: 14px');
         console.log('📍 Сайт: TikTopFree');
         
         let botState = {
@@ -241,7 +374,6 @@
         
         // ========== СОЗДАНИЕ UI ==========
         function createUI() {
-            // Стили
             const style = document.createElement('style');
             style.textContent = `
                 .tikbot-panel {
@@ -382,7 +514,6 @@
             `;
             document.head.appendChild(style);
             
-            // HTML панели
             const panel = document.createElement('div');
             panel.className = 'tikbot-panel';
             panel.innerHTML = `
@@ -390,7 +521,7 @@
                     <div class="tikbot-title">
                         <span>🤖</span>
                         <span>TikTokFree Bot</span>
-                        <span style="font-size: 10px;" id="tikbot-version">v2.0</span>
+                        <span style="font-size: 10px;" id="tikbot-version">v2.1</span>
                     </div>
                     <div class="tikbot-status ${botState.isRunning ? 'running' : 'stopped'}">
                         ${botState.isRunning ? 'РАБОТАЕТ' : 'СТОП'}
@@ -419,6 +550,10 @@
                             Звук при выполнении
                         </label>
                         <label>
+                            <input type="checkbox" id="tikbot-auto-click" ${CONFIG.autoClickButton ? 'checked' : ''}>
+                            Автонажатие кнопки в TikTok
+                        </label>
+                        <label>
                             <input type="checkbox" id="tikbot-close-tab" ${CONFIG.autoCloseTab ? 'checked' : ''}>
                             Закрывать вкладку TikTok
                         </label>
@@ -437,7 +572,6 @@
             `;
             document.body.appendChild(panel);
             
-            // Минимизация
             const header = panel.querySelector('.tikbot-header');
             const content = panel.querySelector('.tikbot-content');
             let minimized = false;
@@ -453,7 +587,6 @@
                 }
             };
             
-            // Кнопки
             document.getElementById('tikbot-start').onclick = () => startBot();
             document.getElementById('tikbot-stop').onclick = () => stopBot();
             document.getElementById('tikbot-config').onclick = () => {
@@ -462,11 +595,9 @@
             };
             document.getElementById('tikbot-save').onclick = () => saveSettings();
             
-            // Обновление статистики
             setInterval(() => updateUI(), 1000);
             updateUI();
             
-            // Добавляем лог
             window.tikbotLog = function(msg) {
                 const logDiv = document.getElementById('tikbot-log');
                 if (logDiv) {
@@ -504,6 +635,7 @@
             CONFIG.webhookUrl = document.getElementById('tikbot-webhook').value;
             CONFIG.autoStart = document.getElementById('tikbot-autostart').checked;
             CONFIG.soundOnComplete = document.getElementById('tikbot-sound').checked;
+            CONFIG.autoClickButton = document.getElementById('tikbot-auto-click').checked;
             CONFIG.autoCloseTab = document.getElementById('tikbot-close-tab').checked;
             CONFIG.waitBeforeClose = parseInt(document.getElementById('tikbot-wait-close').value) * 1000 || 10000;
             CONFIG.maxTasksPerSession = parseInt(document.getElementById('tikbot-max').value) || 100;
@@ -511,6 +643,7 @@
             GM_setValue('webhookUrl', CONFIG.webhookUrl);
             GM_setValue('autoStart', CONFIG.autoStart);
             GM_setValue('sound', CONFIG.soundOnComplete);
+            GM_setValue('autoClickButton', CONFIG.autoClickButton);
             GM_setValue('autoCloseTab', CONFIG.autoCloseTab);
             GM_setValue('waitBeforeClose', CONFIG.waitBeforeClose);
             GM_setValue('maxTasks', CONFIG.maxTasksPerSession);
@@ -544,6 +677,42 @@
                 audio.volume = 0.3;
                 audio.play().catch(e => {});
             } catch(e) {}
+        }
+        
+        // ========== СЛУШАТЕЛЬ СООБЩЕНИЙ ==========
+        function setupMessageListener() {
+            window.addEventListener('message', function(event) {
+                if (event.data && event.data.type === 'TIKTOK_TASK_COMPLETED') {
+                    window.tikbotLog('📨 Получен сигнал о завершении задания от TikTok!');
+                    window.tikbotLog('🔍 Автоматически проверяю задание...');
+                    
+                    setTimeout(() => {
+                        const checkBtn = document.querySelector(CONFIG.selectors.checkBtn);
+                        if (checkBtn) {
+                            checkBtn.click();
+                            window.tikbotLog('✅ Кнопка "Проверить" нажата автоматически');
+                        } else {
+                            window.tikbotLog('❌ Кнопка "Проверить" не найдена');
+                        }
+                    }, 1000);
+                }
+            });
+            
+            // Также проверяем localStorage
+            setInterval(() => {
+                const completed = localStorage.getItem('tikbot_task_completed');
+                if (completed === 'true') {
+                    window.tikbotLog('📨 Обнаружено завершение задания в localStorage!');
+                    const checkBtn = document.querySelector(CONFIG.selectors.checkBtn);
+                    if (checkBtn) {
+                        checkBtn.click();
+                        window.tikbotLog('✅ Кнопка "Проверить" нажата автоматически');
+                    }
+                    localStorage.removeItem('tikbot_task_completed');
+                }
+            }, 1000);
+            
+            window.tikbotLog('📡 Слушатель сообщений запущен');
         }
         
         // ========== ОСНОВНАЯ ЛОГИКА ==========
@@ -725,6 +894,7 @@
         // ========== ЗАПУСК ==========
         setTimeout(() => {
             createUI();
+            setupMessageListener();
             if (CONFIG.autoStart) {
                 setTimeout(() => startBot(), 3000);
             }
