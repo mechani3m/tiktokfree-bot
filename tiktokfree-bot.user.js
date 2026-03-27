@@ -22,7 +22,7 @@
 (function() {
     'use strict';
     
-    console.log('%c🤖 TikTokFree Bot v1.0.1 загружен', 'color: #00ff00; font-size: 14px');
+    console.log('%c🤖 TikTokFree Bot v1.0.2 загружен', 'color: #00ff00; font-size: 14px');
     
     // ========== КОНФИГУРАЦИЯ ==========
     const CONFIG = {
