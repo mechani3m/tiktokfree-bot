@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/YOUR_USERNAME/tiktokfree-bot
-// @version      1.1.1
+// @version      1.0.1
 // @description  Автоматическое выполнение заданий на tiktop-free.com
 // @author       YOUR_NAME
 // @match        https://tiktop-free.com/tasks/*
@@ -14,13 +14,15 @@
 // @grant        GM_registerMenuCommand
 // @connect      trigger.macrodroid.com
 // @connect      raw.githubusercontent.com
+// @downloadURL  https://raw.githubusercontent.com/mechani3m/tiktokfree-bot/main/tiktokfree-bot.user.js
+// @updateURL    https://raw.githubusercontent.com/mechani3m/tiktokfree-bot/main/tiktokfree-bot.user.js
 // @run-at       document-end
 // ==/UserScript==
 
 (function() {
     'use strict';
     
-    console.log('%c🤖 TikTokFree Bot v1.0.0 загружен', 'color: #00ff00; font-size: 14px');
+    console.log('%c🤖 TikTokFree Bot v1.0.1 загружен', 'color: #00ff00; font-size: 14px');
     
     // ========== КОНФИГУРАЦИЯ ==========
     const CONFIG = {
@@ -202,7 +204,7 @@
                 <div class="tikbot-title">
                     <span>🤖</span>
                     <span>TikTokFree Bot</span>
-                    <span style="font-size: 10px;" id="tikbot-version">v1.0.0</span>
+                    <span style="font-size: 10px;" id="tikbot-version">v1.0.1</span>
                 </div>
                 <div class="tikbot-status ${botState.isRunning ? 'running' : 'stopped'}">
                     ${botState.isRunning ? 'РАБОТАЕТ' : 'СТОП'}
