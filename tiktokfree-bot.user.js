@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      3.0.0
+// @version      3.0.1
 // @description  Простой бот: открыть TikTok -> найти кнопку -> вебхук -> закрыть -> проверить
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
@@ -28,7 +28,7 @@
     // ========== НАСТРОЙКИ ==========
     const SETTINGS = {
         webhookUrl: GM_getValue('webhookUrl', 'https://trigger.macrodroid.com/e4e9515c-9214-454b-83c2-f81eb88e356d'),
-        waitBeforeClose: 3000  // ждать 3 секунды перед закрытием
+        waitBeforeClose: 15000  // ждать 3 секунды перед закрытием
     };
     
     // ========== TIKTOK - ТОЛЬКО ПОИСК КНОПКИ И ВЕБХУК ==========
