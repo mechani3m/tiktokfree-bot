@@ -28,14 +28,14 @@
     // ========== НАСТРОЙКИ ==========
     const SETTINGS = {
         webhookUrl: GM_getValue('webhookUrl', 'https://trigger.macrodroid.com/e4e9515c-9214-454b-83c2-f81eb88e356d'),
-        waitBeforeClose: 15000
+        waitBeforeClose: 20000
     };
     
     // ========== TIKTOK ==========
     if (isTikTok) {
         console.log('🎯 TikTok Bot запущен');
         
-        function waitForButton(timeout = 15000) {
+        function waitForButton(timeout = 20000) {
             return new Promise((resolve) => {
                 const startTime = Date.now();
                 const selectors = [
