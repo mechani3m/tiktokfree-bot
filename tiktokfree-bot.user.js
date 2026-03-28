@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      3.4.0
-// @description  Бот с отслеживанием тост-уведомлений
+// @version      3.5.0
+// @description  Бот с автозапуском после обновления и отслеживанием тост-уведомлений
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -13,6 +13,7 @@
 // @grant        GM_notification
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_deleteValue
 // @connect      trigger.macrodroid.com
 // @downloadURL  https://raw.githubusercontent.com/mechani3m/tiktokfree-bot/main/tiktokfree-bot.user.js
 // @updateURL    https://raw.githubusercontent.com/mechani3m/tiktokfree-bot/main/tiktokfree-bot.user.js
@@ -28,14 +29,15 @@
     // ========== НАСТРОЙКИ ==========
     const SETTINGS = {
         webhookUrl: GM_getValue('webhookUrl', 'https://trigger.macrodroid.com/e4e9515c-9214-454b-83c2-f81eb88e356d'),
-        waitBeforeClose: 20000
+        waitBeforeClose: 25000,
+        autoStartDelay: 5000  // Задержка перед автозапуском 5 секунд
     };
     
     // ========== TIKTOK ==========
     if (isTikTok) {
         console.log('🎯 TikTok Bot запущен');
         
-        function waitForButton(timeout = 20000) {
+        function waitForButton(timeout = 25000) {
             return new Promise((resolve) => {
                 const startTime = Date.now();
                 const selectors = [
@@ -137,6 +139,7 @@
         console.log('🤖 TikTokFree Bot запущен');
         
         let running = false;
+        let autoStartTimer = null;
         let stats = {
             completed: 0,
             earned: 0
@@ -149,6 +152,13 @@
         if (savedStats) {
             stats = savedStats;
             console.log('📊 Загружена сохраненная статистика:', stats);
+        }
+        
+        // Проверяем, был ли бот запущен до обновления
+        const wasRunning = GM_getValue('botWasRunning', false);
+        if (wasRunning) {
+            console.log('🔄 Бот был запущен до обновления страницы');
+            GM_deleteValue('botWasRunning');
         }
         
         // Сохраняем статистику
@@ -181,7 +191,7 @@
             <div>✅ Выполнено: <span id="completed">0</span></div>
             <div>💎 Заработано: <span id="earned">0</span></div>
             <hr style="margin: 6px 0; opacity: 0.3;">
-            <div style="font-size: 10px;">📌 Ждем тост "Вы успешно выполнили"</div>
+            <div style="font-size: 10px;" id="auto-status">⏳ Автозапуск через 5 сек...</div>
             <button id="start-btn" style="margin-top: 8px; width: 100%; padding: 6px; background: #4caf50; color: white; border: none; border-radius: 6px; cursor: pointer;">▶ СТАРТ</button>
             <button id="stop-btn" style="margin-top: 4px; width: 100%; padding: 6px; background: #f44336; color: white; border: none; border-radius: 6px; cursor: pointer;">⏹ СТОП</button>
             <button id="reset-stats" style="margin-top: 4px; width: 100%; padding: 4px; background: #ff9800; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 10px;">🔄 Сбросить статистику</button>
@@ -195,6 +205,11 @@
             document.getElementById('earned').innerText = stats.earned.toFixed(2);
             document.getElementById('bot-status').innerText = running ? 'РАБОТАЕТ' : 'СТОП';
             document.getElementById('bot-status').style.background = running ? '#4caf50' : '#f44336';
+        }
+        
+        function updateAutoStatus(text) {
+            const statusEl = document.getElementById('auto-status');
+            if (statusEl) statusEl.innerHTML = text;
         }
         
         function getTask() {
@@ -240,11 +255,10 @@
                 let observer = null;
                 let timeoutId = null;
                 
-                // Создаем MutationObserver для отслеживания новых элементов
                 observer = new MutationObserver((mutations) => {
                     for (const mutation of mutations) {
                         for (const node of mutation.addedNodes) {
-                            if (node.nodeType === 1) { // Element node
+                            if (node.nodeType === 1) {
                                 if (node.classList && node.classList.contains('toast')) {
                                     const text = node.innerText || node.textContent;
                                     if (text.includes('успешно') || text.includes('зачислено') || text.includes('Выполнили')) {
@@ -255,7 +269,6 @@
                                         return;
                                     }
                                 }
-                                // Проверяем внутри элемента
                                 const toast = node.querySelector?.('.toast');
                                 if (toast) {
                                     const text = toast.innerText;
@@ -286,7 +299,6 @@
         async function clickCheckAndWait(task) {
             console.log('🔍 Нажимаю "Проверить" и жду подтверждения...');
             
-            // Находим и нажимаем кнопку "Проверить"
             const checkBtn = document.querySelector('.btn--check');
             if (!checkBtn) {
                 console.log('❌ Кнопка "Проверить" не найдена');
@@ -296,34 +308,29 @@
             checkBtn.click();
             console.log('🔘 Кнопка "Проверить" нажата');
             
-            // Ждем появления тост-уведомления
             const toastResult = await waitForToast(15000);
             
             if (toastResult.success) {
                 console.log(`✅ ЗАДАНИЕ ВЫПОЛНЕНО! +${task.reward} монет`);
                 console.log(`📝 Сообщение: ${toastResult.text}`);
                 
-                // Обновляем статистику
                 stats.completed++;
                 stats.earned += task.reward;
                 saveStats();
                 updateUI();
                 
-                // Воспроизводим звук
                 try {
                     const audio = new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3');
                     audio.volume = 0.3;
                     audio.play().catch(e => {});
                 } catch(e) {}
                 
-                // Уведомление
                 GM_notification({
                     title: '✅ Задание выполнено!',
                     text: `+${task.reward} монет. Всего: ${stats.completed} заданий, ${stats.earned.toFixed(2)} монет`,
                     timeout: 3000
                 });
                 
-                // Скрываем задание
                 const hideData = new FormData();
                 hideData.append('UserPerformTask[id]', task.id);
                 hideData.append('UserPerformTask[task_execution_id]', task.execId);
@@ -357,7 +364,6 @@
                         clearInterval(checkInterval);
                         console.log('👀 Возврат на сайт!');
                         
-                        // Небольшая задержка перед проверкой
                         setTimeout(async () => {
                             const success = await clickCheckAndWait(task);
                             resolve(success);
@@ -398,7 +404,7 @@
         }
         
         // Запуск цикла
-        async function startBot() {
+        async function startBot(showMessage = true) {
             if (running) {
                 console.log('⚠️ Бот уже запущен');
                 return;
@@ -406,28 +412,29 @@
             
             running = true;
             updateUI();
-            console.log('\n🚀 БОТ ЗАПУЩЕН');
-            console.log('📌 Схема работы:');
-            console.log('   1. Бот открывает TikTok');
-            console.log('   2. Ждет 15 секунд (MacroDroid нажимает подписку)');
-            console.log('   3. Возвращаешься на сайт');
-            console.log('   4. Бот нажимает "Проверить"');
-            console.log('   5. Ждет тост "Вы успешно выполнили задание!"');
-            console.log('   6. Считает монеты\n');
+            
+            if (showMessage) {
+                console.log('\n🚀 БОТ ЗАПУЩЕН');
+                console.log('📌 Схема работы:');
+                console.log('   1. Бот открывает TikTok');
+                console.log('   2. Ждет 15 секунд (MacroDroid нажимает подписку)');
+                console.log('   3. Возвращаешься на сайт');
+                console.log('   4. Бот нажимает "Проверить"');
+                console.log('   5. Ждет тост "Вы успешно выполнили задание!"');
+                console.log('   6. Считает монеты\n');
+            }
             
             let count = 0;
             const MAX_TASKS = 100;
             
             while (running && count < MAX_TASKS) {
                 const success = await doTask();
-                if (success) {
-                    count++;
-                    console.log(`📊 Прогресс: ${count}/${MAX_TASKS} заданий`);
-                }
+                if (success) count++;
                 await new Promise(r => setTimeout(r, 2000));
                 
                 if (!document.querySelector('.task-item--wrapper')) {
                     console.log('📭 Задания кончились, обновляю страницу...');
+                    GM_setValue('botWasRunning', true);
                     setTimeout(() => location.reload(), 2000);
                     break;
                 }
@@ -447,6 +454,8 @@
         function stopBot() {
             running = false;
             if (checkInterval) clearInterval(checkInterval);
+            if (autoStartTimer) clearTimeout(autoStartTimer);
+            updateAutoStatus('⏹ Бот остановлен');
             console.log('🛑 Бот остановлен вручную');
             updateUI();
         }
@@ -466,7 +475,36 @@
             updateUI();
         }
         
-        document.getElementById('start-btn').onclick = startBot;
+        // Автозапуск с паузой
+        function scheduleAutoStart() {
+            if (autoStartTimer) clearTimeout(autoStartTimer);
+            
+            let secondsLeft = SETTINGS.autoStartDelay / 1000;
+            updateAutoStatus(`⏳ Автозапуск через ${secondsLeft} сек... (нажми СТОП для отмены)`);
+            
+            const countdown = setInterval(() => {
+                secondsLeft--;
+                if (secondsLeft > 0 && !running) {
+                    updateAutoStatus(`⏳ Автозапуск через ${secondsLeft} сек... (нажми СТОП для отмены)`);
+                }
+                if (secondsLeft <= 0 || running) {
+                    clearInterval(countdown);
+                }
+            }, 1000);
+            
+            autoStartTimer = setTimeout(() => {
+                if (!running) {
+                    updateAutoStatus('🚀 Автозапуск...');
+                    startBot(true);
+                }
+            }, SETTINGS.autoStartDelay);
+        }
+        
+        document.getElementById('start-btn').onclick = () => {
+            if (autoStartTimer) clearTimeout(autoStartTimer);
+            updateAutoStatus('▶ Запуск вручную...');
+            startBot(true);
+        };
         document.getElementById('stop-btn').onclick = stopBot;
         document.getElementById('reset-stats').onclick = resetStats;
         
@@ -474,8 +512,13 @@
         window.resetStats = resetStats;
         
         updateUI();
-        console.log('✅ Бот готов! Нажми СТАРТ');
+        
+        // Запускаем автозапуск с паузой
+        scheduleAutoStart();
+        
+        console.log('✅ Бот готов!');
         console.log('💡 Команды: botStats() - статистика, resetStats() - сброс');
+        console.log(`⏳ Автозапуск через ${SETTINGS.autoStartDelay / 1000} секунд...`);
     }
     
 })();
