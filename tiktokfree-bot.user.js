@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      3.5.0
-// @description  Бот с автозапуском после обновления и отслеживанием тост-уведомлений
+// @version      3.7.0
+// @description  Бот с разными вебхуками для подписки и лайка
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -29,23 +29,32 @@
     // ========== НАСТРОЙКИ ==========
     const SETTINGS = {
         webhookUrl: GM_getValue('webhookUrl', 'https://trigger.macrodroid.com/e4e9515c-9214-454b-83c2-f81eb88e356d'),
-        waitBeforeClose: 25000,
-        autoStartDelay: 5000  // Задержка перед автозапуском 5 секунд
+        waitBeforeClose: 15000,
+        autoStartDelay: 5000
     };
     
     // ========== TIKTOK ==========
     if (isTikTok) {
         console.log('🎯 TikTok Bot запущен');
         
-        function waitForButton(timeout = 25000) {
+        // Получаем тип задания из URL параметра
+        const urlParams = new URLSearchParams(location.search);
+        const taskType = urlParams.get('task_type') || localStorage.getItem('current_task_type') || 'follow';
+        
+        function waitForButton(timeout = 15000) {
             return new Promise((resolve) => {
                 const startTime = Date.now();
-                const selectors = [
+                const selectors = taskType === 'follow' ? [
                     '[data-e2e="follow-button"]',
                     'button[aria-label*="Подписаться"]',
                     'button[aria-label*="Follow"]',
                     'button[class*="follow"]',
                     'div[data-e2e="follow-button"] button'
+                ] : [
+                    '[data-e2e="like-button"]',
+                    'button[aria-label*="Нравится"]',
+                    'button[aria-label*="Like"]',
+                    'span[data-e2e="like-icon"]'
                 ];
                 
                 function check() {
@@ -62,7 +71,11 @@
                     const buttons = document.querySelectorAll('button');
                     for (const btn of buttons) {
                         const text = btn.innerText?.toLowerCase() || '';
-                        if (text.includes('подписаться') || text.includes('follow')) {
+                        if (taskType === 'follow' && (text.includes('подписаться') || text.includes('follow'))) {
+                            resolve(btn);
+                            return;
+                        }
+                        if (taskType === 'like' && (text.includes('нравится') || text.includes('like'))) {
                             resolve(btn);
                             return;
                         }
@@ -94,10 +107,11 @@
             await new Promise(r => setTimeout(r, 2000));
             
             const button = await waitForButton(15000);
+            const action = taskType === 'follow' ? 'follow' : 'like';
             
             if (button) {
-                console.log('✅ Найдена кнопка:', button.innerText);
-                const url = SETTINGS.webhookUrl + '/follow';
+                console.log(`✅ Найдена кнопка ${action}:`, button.innerText);
+                const url = SETTINGS.webhookUrl + `/${action}`;
                 GM_xmlhttpRequest({
                     method: 'POST',
                     url: url,
@@ -106,23 +120,29 @@
                         timestamp: Date.now(),
                         url: location.href,
                         buttonText: button.innerText,
-                        buttonFound: true
+                        buttonFound: true,
+                        taskType: action
                     })
                 });
-                console.log('📡 Вебхук отправлен');
+                console.log(`📡 Вебхук отправлен: /${action}`);
             } else {
-                console.log('❌ Кнопка не найдена');
-                const url = SETTINGS.webhookUrl + '/follow_not_found';
+                console.log(`❌ Кнопка ${action} не найдена`);
+                const url = SETTINGS.webhookUrl + `/${action}_not_found`;
                 GM_xmlhttpRequest({
                     method: 'POST',
                     url: url,
-                    data: JSON.stringify({ timestamp: Date.now(), url: location.href, buttonFound: false })
+                    data: JSON.stringify({ 
+                        timestamp: Date.now(), 
+                        url: location.href, 
+                        buttonFound: false,
+                        taskType: action
+                    })
                 });
             }
             
             const indicator = document.createElement('div');
             indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: rgba(0,0,0,0.7); color: #00ff00; padding: 4px 8px; border-radius: 4px; font-size: 10px;`;
-            indicator.innerHTML = button ? '🤖 ✅ Кнопка найдена, вебхук отправлен' : '🤖 ❌ Кнопка не найдена';
+            indicator.innerHTML = button ? `🤖 ✅ Кнопка ${action} найдена, вебхук отправлен` : `🤖 ❌ Кнопка ${action} не найдена`;
             document.body.appendChild(indicator);
             
             setTimeout(() => {
@@ -145,7 +165,6 @@
             earned: 0
         };
         let checkInterval = null;
-        let toastObserver = null;
         
         // Загружаем сохраненную статистику
         const savedStats = GM_getValue('botStats', null);
@@ -166,6 +185,22 @@
             GM_setValue('botStats', stats);
         }
         
+        // Определяем тип задания по заголовку
+        function getTaskType() {
+            const titleEl = document.querySelector('.list-item--title.task-item--title');
+            if (!titleEl) return null;
+            
+            const titleText = titleEl.innerText || titleEl.textContent;
+            console.log('📝 Заголовок задания:', titleText);
+            
+            if (titleText.includes('Подписаться')) {
+                return { type: 'follow', action: 'follow', webhook: '/follow' };
+            } else if (titleText.includes('лайк') || titleText.includes('Like')) {
+                return { type: 'like', action: 'like', webhook: '/like' };
+            }
+            return null;
+        }
+        
         // Создаем панель
         const panel = document.createElement('div');
         panel.style.cssText = `
@@ -179,7 +214,7 @@
             color: white;
             font-family: monospace;
             font-size: 12px;
-            min-width: 220px;
+            min-width: 240px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         `;
         panel.innerHTML = `
@@ -190,6 +225,7 @@
             <div>💰 Баланс: <span id="balance">0</span></div>
             <div>✅ Выполнено: <span id="completed">0</span></div>
             <div>💎 Заработано: <span id="earned">0</span></div>
+            <div id="task-type-display" style="font-size: 10px; margin-top: 4px; opacity: 0.8;">📋 Тип: ожидание</div>
             <hr style="margin: 6px 0; opacity: 0.3;">
             <div style="font-size: 10px;" id="auto-status">⏳ Автозапуск через 5 сек...</div>
             <button id="start-btn" style="margin-top: 8px; width: 100%; padding: 6px; background: #4caf50; color: white; border: none; border-radius: 6px; cursor: pointer;">▶ СТАРТ</button>
@@ -205,6 +241,16 @@
             document.getElementById('earned').innerText = stats.earned.toFixed(2);
             document.getElementById('bot-status').innerText = running ? 'РАБОТАЕТ' : 'СТОП';
             document.getElementById('bot-status').style.background = running ? '#4caf50' : '#f44336';
+            
+            // Показываем тип текущего задания
+            const taskType = getTaskType();
+            if (taskType) {
+                const typeText = taskType.type === 'follow' ? '📌 Подписка' : '❤️ Лайк';
+                document.getElementById('task-type-display').innerHTML = typeText;
+                document.getElementById('task-type-display').style.color = taskType.type === 'follow' ? '#aaffaa' : '#ffaaaa';
+            } else {
+                document.getElementById('task-type-display').innerHTML = '📋 Нет заданий';
+            }
         }
         
         function updateAutoStatus(text) {
@@ -228,20 +274,30 @@
             }
             const executeUrl = wrapper.querySelector('.btn--complete2')?.href || wrapper.querySelector('.btn--complete')?.href;
             
-            return { wrapper, id, execId, nonce, reward, executeUrl };
+            // Определяем тип задания
+            const taskType = getTaskType();
+            
+            return { wrapper, id, execId, nonce, reward, executeUrl, taskType };
         }
         
-        function clickExecute(url) {
-            console.log('🔘 Открываю TikTok:', url);
-            window.open(url, '_blank');
+        function clickExecute(url, taskType) {
+            console.log(`🔘 Открываю TikTok (${taskType?.type || 'unknown'}):`, url);
+            
+            // Сохраняем тип задания в localStorage для TikTok скрипта
+            localStorage.setItem('current_task_type', taskType?.type || 'follow');
+            
+            // Добавляем параметр в URL
+            const separator = url.includes('?') ? '&' : '?';
+            const urlWithType = `${url}${separator}task_type=${taskType?.type || 'follow'}`;
+            
+            window.open(urlWithType, '_blank');
         }
         
         // Ожидание появления тост-уведомления
         function waitForToast(timeout = 30000) {
             return new Promise((resolve) => {
-                console.log('👀 Ожидаю появление тост-уведомления "Вы успешно выполнили задание!"...');
+                console.log('👀 Ожидаю появление тост-уведомления...');
                 
-                // Проверяем существующие тосты
                 const existingToasts = document.querySelectorAll('.toast');
                 for (const toast of existingToasts) {
                     const text = toast.innerText || toast.textContent;
@@ -311,7 +367,7 @@
             const toastResult = await waitForToast(15000);
             
             if (toastResult.success) {
-                console.log(`✅ ЗАДАНИЕ ВЫПОЛНЕНО! +${task.reward} монет`);
+                console.log(`✅ ЗАДАНИЕ ВЫПОЛНЕНО! +${task.reward} монет (${task.taskType?.type === 'follow' ? 'Подписка' : 'Лайк'})`);
                 console.log(`📝 Сообщение: ${toastResult.text}`);
                 
                 stats.completed++;
@@ -327,7 +383,7 @@
                 
                 GM_notification({
                     title: '✅ Задание выполнено!',
-                    text: `+${task.reward} монет. Всего: ${stats.completed} заданий, ${stats.earned.toFixed(2)} монет`,
+                    text: `+${task.reward} монет (${task.taskType?.type === 'follow' ? 'Подписка' : 'Лайк'}). Всего: ${stats.completed}`,
                     timeout: 3000
                 });
                 
@@ -389,10 +445,16 @@
                 return false;
             }
             
-            console.log(`\n🎯 НОВОЕ ЗАДАНИЕ | Награда: +${task.reward} монет`);
+            if (!task.taskType) {
+                console.log('❌ Не удалось определить тип задания');
+                return false;
+            }
+            
+            const typeName = task.taskType.type === 'follow' ? '📌 ПОДПИСКА' : '❤️ ЛАЙК';
+            console.log(`\n🎯 НОВОЕ ЗАДАНИЕ | ${typeName} | Награда: +${task.reward} монет`);
             console.log(`🔗 Ссылка: ${task.executeUrl}`);
             
-            clickExecute(task.executeUrl);
+            clickExecute(task.executeUrl, task.taskType);
             
             const success = await waitForReturn(task);
             
@@ -416,12 +478,13 @@
             if (showMessage) {
                 console.log('\n🚀 БОТ ЗАПУЩЕН');
                 console.log('📌 Схема работы:');
-                console.log('   1. Бот открывает TikTok');
-                console.log('   2. Ждет 15 секунд (MacroDroid нажимает подписку)');
-                console.log('   3. Возвращаешься на сайт');
-                console.log('   4. Бот нажимает "Проверить"');
-                console.log('   5. Ждет тост "Вы успешно выполнили задание!"');
-                console.log('   6. Считает монеты\n');
+                console.log('   1. Определяет тип задания (Подписка / Лайк)');
+                console.log('   2. Открывает TikTok с параметром task_type');
+                console.log('   3. Ждет 15 секунд (MacroDroid нажимает кнопку)');
+                console.log('   4. Возвращаешься на сайт');
+                console.log('   5. Бот нажимает "Проверить"');
+                console.log('   6. Ждет тост "Вы успешно выполнили задание!"');
+                console.log('   7. Считает монеты\n');
             }
             
             let count = 0;
