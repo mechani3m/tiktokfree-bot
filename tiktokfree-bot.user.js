@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TikTokFree Auto Bot 3.9.0
+// @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      3.9.0
-// @description  Бот с обработкой ошибок и повторной проверкой
+// @version      3.9.1
+// @description  Бот с правильной обработкой скрытия заданий при ненайденной кнопке
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -200,12 +200,13 @@
                 });
                 console.log(`📡 Вебхук отправлен: /${action}_not_found`);
                 
+                // Сохраняем флаг, что задание нужно скрыть
                 localStorage.setItem('hide_current_task', 'true');
                 localStorage.setItem('hide_task_reason', `button_${action}_not_found`);
                 
                 const indicator = document.createElement('div');
                 indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: rgba(0,0,0,0.7); color: #ff0000; padding: 4px 8px; border-radius: 4px; font-size: 10px;`;
-                indicator.innerHTML = `🤖 ❌ Кнопка ${action} НЕ НАЙДЕНА, задание будет скрыто`;
+                indicator.innerHTML = `🤖 ❌ Кнопка ${action} НЕ НАЙДЕНА, задание будет скрыто при возврате`;
                 document.body.appendChild(indicator);
                 setTimeout(() => indicator.remove(), 5000);
             }
@@ -231,9 +232,8 @@
             earned: 0
         };
         let checkInterval = null;
-        let toastObserver = null;
-        let retryCount = 0; // Счетчик повторных проверок
-        const MAX_RETRY = 2; // Максимум 2 попытки проверки
+        let retryCount = 0;
+        const MAX_RETRY = 2;
         
         // Загружаем сохраненную статистику
         const savedStats = GM_getValue('botStats', null);
@@ -290,25 +290,11 @@
             return false;
         }
         
-        function checkAndHideIfNeeded() {
-            const needHide = localStorage.getItem('hide_current_task');
-            if (needHide === 'true') {
-                const reason = localStorage.getItem('hide_task_reason');
-                console.log(`⚠️ Задание нужно скрыть. Причина: ${reason}`);
-                localStorage.removeItem('hide_current_task');
-                localStorage.removeItem('hide_task_reason');
-                hideCurrentTask();
-                return true;
-            }
-            return false;
-        }
-        
-        // Функция ожидания появления тост-уведомления с обработкой ошибок
+        // Функция ожидания появления тост-уведомления
         function waitForToast(timeout = 30000) {
             return new Promise((resolve) => {
                 console.log('👀 Ожидаю появление тост-уведомления...');
                 
-                // Проверяем существующие тосты
                 const existingToasts = document.querySelectorAll('.toast');
                 for (const toast of existingToasts) {
                     const text = toast.innerText || toast.textContent;
@@ -397,7 +383,6 @@
             const toastResult = await waitForToast(15000);
             
             if (toastResult.success) {
-                // Успешное выполнение
                 console.log(`✅ ЗАДАНИЕ ВЫПОЛНЕНО! +${task.reward} монет (${task.taskType?.name || 'unknown'})`);
                 console.log(`📝 Сообщение: ${toastResult.text}`);
                 
@@ -418,7 +403,6 @@
                     timeout: 3000
                 });
                 
-                // Скрываем задание
                 const hideData = new FormData();
                 hideData.append('UserPerformTask[id]', task.id);
                 hideData.append('UserPerformTask[task_execution_id]', task.execId);
@@ -432,15 +416,13 @@
                 
                 if (task.wrapper) task.wrapper.remove();
                 
-                retryCount = 0; // Сбрасываем счетчик
+                retryCount = 0;
                 return true;
                 
             } else if (toastResult.error) {
-                // Ошибка "Упс! Кажется вы не выполнили задание."
                 console.log(`⚠️ Ошибка: ${toastResult.text}`);
                 
                 if (isRetry) {
-                    // Это уже повторная попытка - скрываем задание
                     console.log('❌ Повторная ошибка, задание будет скрыто');
                     GM_notification({
                         title: '❌ Задание не выполнено',
@@ -451,25 +433,19 @@
                     retryCount = 0;
                     return false;
                 } else {
-                    // Первая ошибка - делаем повторную проверку
                     console.log('🔄 Повторная проверка через 3 секунды...');
                     retryCount++;
-                    
-                    // Ждем 3 секунды и проверяем снова
                     await new Promise(r => setTimeout(r, 3000));
-                    
-                    // Повторно нажимаем "Проверить"
                     const retryResult = await clickCheckAndWait(task, true);
                     return retryResult;
                 }
             } else {
-                // Нет тоста
                 console.log('❌ Тост не появился');
                 return false;
             }
         }
         
-        // Ждем возврата на сайт
+        // Ждем возврата на сайт (С ПРОВЕРКОЙ ФЛАГА СКРЫТИЯ ПЕРЕД ПРОВЕРКОЙ)
         function waitForReturn(task) {
             if (checkInterval) clearInterval(checkInterval);
             
@@ -482,13 +458,36 @@
                         clearInterval(checkInterval);
                         console.log('👀 Возврат на сайт!');
                         
-                        const wasHidden = checkAndHideIfNeeded();
-                        if (wasHidden) {
-                            console.log('🗑 Задание скрыто (кнопка не найдена в TikTok)');
+                        // ПРОВЕРЯЕМ СРАЗУ ПРИ ВОЗВРАТЕ, ДО НАЖАТИЯ "ПРОВЕРИТЬ"
+                        const needHide = localStorage.getItem('hide_current_task');
+                        if (needHide === 'true') {
+                            const reason = localStorage.getItem('hide_task_reason');
+                            console.log(`⚠️ Задание нужно скрыть. Причина: ${reason}`);
+                            localStorage.removeItem('hide_current_task');
+                            localStorage.removeItem('hide_task_reason');
+                            
+                            // Скрываем задание
+                            hideCurrentTask();
+                            
+                            // Отправляем вебхук о скрытии
+                            const taskType = task.taskType?.type || 'unknown';
+                            const url = SETTINGS.webhookUrl + `/${taskType}_task_hidden`;
+                            GM_xmlhttpRequest({
+                                method: 'POST',
+                                url: url,
+                                headers: { 'Content-Type': 'application/json' },
+                                data: JSON.stringify({
+                                    timestamp: Date.now(),
+                                    reason: reason,
+                                    taskType: taskType
+                                })
+                            });
+                            
                             resolve(false);
                             return;
                         }
                         
+                        // Если не нужно скрывать, нажимаем "Проверить"
                         setTimeout(async () => {
                             const success = await clickCheckAndWait(task, false);
                             resolve(success);
@@ -595,6 +594,16 @@
         }
         
         async function doTask() {
+            // Проверяем, нет ли уже флага скрытия перед началом
+            const pendingHide = localStorage.getItem('hide_current_task');
+            if (pendingHide === 'true') {
+                console.log('⚠️ Есть ожидающее скрытие задания, пропускаем...');
+                localStorage.removeItem('hide_current_task');
+                localStorage.removeItem('hide_task_reason');
+                hideCurrentTask();
+                return false;
+            }
+            
             const task = getTask();
             if (!task) {
                 console.log('❌ Нет заданий');
@@ -637,11 +646,12 @@
                 console.log('   2. Открывает TikTok с параметром task_type');
                 console.log('   3. Проверяет наличие кнопки 5 секунд');
                 console.log('   4. Если кнопка есть → отправляет вебхук');
-                console.log('   5. Если кнопки нет → отправляет not_found и скрывает задание');
+                console.log('   5. Если кнопки нет → отправляет not_found и скрывает задание ПРИ ВОЗВРАТЕ');
                 console.log('   6. Ждет 15 секунд и закрывает вкладку');
-                console.log('   7. Возвращаешься → бот нажимает "Проверить"');
-                console.log('   8. При ошибке "Упс!" делает повторную проверку');
-                console.log('   9. При повторной ошибке → скрывает задание\n');
+                console.log('   7. Возвращаешься → бот ПРОВЕРЯЕТ ФЛАГ СКРЫТИЯ');
+                console.log('   8. Если флаг есть → скрывает задание БЕЗ проверки');
+                console.log('   9. Если флага нет → нажимает "Проверить"');
+                console.log('   10. При ошибке "Упс!" делает повторную проверку\n');
             }
             
             let count = 0;
