@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      4.1.0
-// @description  Исправленное скрытие заданий при ненайденной кнопке
+// @version      4.2.0
+// @description  Быстрое закрытие при ненайденной кнопке + гарантированное скрытие
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -29,7 +29,8 @@
     // ========== НАСТРОЙКИ ==========
     const SETTINGS = {
         webhookUrl: GM_getValue('webhookUrl', 'https://trigger.macrodroid.com/e4e9515c-9214-454b-83c2-f81eb88e356d'),
-        waitBeforeClose: 15000,
+        waitBeforeCloseFound: 15000,    // 15 секунд если кнопка найдена
+        waitBeforeCloseNotFound: 1000,   // 1 секунда если кнопка НЕ найдена
         autoStartDelay: 5000,
         checkDelayAfterReturn: 1500
     };
@@ -41,7 +42,8 @@
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || localStorage.getItem('current_task_type') || 'follow';
         
-        let webhookSent = false;
+        let buttonFound = false;
+        let searchCompleted = false;
         
         function delay(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
@@ -70,7 +72,7 @@
             });
         }
         
-        // Быстрый поиск кнопки подписки
+        // Поиск кнопки подписки
         async function findFollowButton() {
             const selectors = [
                 '[data-e2e="follow-button"]',
@@ -80,12 +82,11 @@
                 'div[data-e2e="follow-button"] button'
             ];
             
-            for (let attempt = 0; attempt < 10; attempt++) {
+            for (let attempt = 0; attempt < 6; attempt++) {
                 for (const selector of selectors) {
                     try {
                         const btn = document.querySelector(selector);
                         if (btn && btn.offsetParent !== null) {
-                            console.log(`✅ Кнопка подписки найдена!`);
                             return btn;
                         }
                     } catch(e) {}
@@ -95,17 +96,16 @@
                 for (const btn of buttons) {
                     const text = btn.innerText?.toLowerCase() || '';
                     if (text.includes('подписаться') || text.includes('follow')) {
-                        console.log(`✅ Кнопка подписки найдена по тексту!`);
                         return btn;
                     }
                 }
                 
-                if (attempt < 9) await delay(300);
+                if (attempt < 5) await delay(500);
             }
             return null;
         }
         
-        // Быстрый поиск кнопки лайка
+        // Поиск кнопки лайка
         async function findLikeButton() {
             const selectors = [
                 '[data-e2e="like-button"]',
@@ -115,12 +115,11 @@
                 '[data-e2e*="like"]'
             ];
             
-            for (let attempt = 0; attempt < 10; attempt++) {
+            for (let attempt = 0; attempt < 6; attempt++) {
                 for (const selector of selectors) {
                     try {
                         const btn = document.querySelector(selector);
                         if (btn && btn.offsetParent !== null) {
-                            console.log(`✅ Кнопка лайка найдена!`);
                             return btn;
                         }
                     } catch(e) {}
@@ -130,18 +129,17 @@
                 for (const btn of buttons) {
                     const text = btn.innerText?.toLowerCase() || '';
                     if (text.includes('нравится') || text.includes('like')) {
-                        console.log(`✅ Кнопка лайка найдена по тексту!`);
                         return btn;
                     }
                 }
                 
-                if (attempt < 9) await delay(300);
+                if (attempt < 5) await delay(500);
             }
             return null;
         }
         
         async function run() {
-            console.log('🔍 Поиск кнопки...');
+            console.log('🔍 Быстрый поиск кнопки...');
             
             let button = null;
             
@@ -151,43 +149,51 @@
                 button = await findLikeButton();
             }
             
+            searchCompleted = true;
+            
             if (button) {
+                buttonFound = true;
                 console.log(`✅ Кнопка ${taskType} найдена!`);
                 sendWebhook(`/${taskType}`, { buttonFound: true });
                 
-                // СОХРАНЯЕМ ЧТО КНОПКА НАЙДЕНА
+                // Сохраняем что кнопка найдена
                 localStorage.setItem('tikbot_button_found', 'true');
                 localStorage.setItem('tikbot_button_type', taskType);
+                localStorage.removeItem('hide_current_task'); // Удаляем флаг скрытия если был
                 
                 const indicator = document.createElement('div');
                 indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: #0a0; color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px;`;
-                indicator.innerHTML = `✅ Кнопка ${taskType} найдена!`;
+                indicator.innerHTML = `✅ Кнопка ${taskType} найдена! Закрытие через ${SETTINGS.waitBeforeCloseFound/1000} сек`;
                 document.body.appendChild(indicator);
-                setTimeout(() => indicator.remove(), 2000);
+                
+                // Ждем положенное время и закрываем
+                setTimeout(() => {
+                    console.log('🔚 Закрываю вкладку (кнопка найдена)');
+                    window.close();
+                }, SETTINGS.waitBeforeCloseFound);
                 
             } else {
+                buttonFound = false;
                 console.log(`❌ Кнопка ${taskType} НЕ НАЙДЕНА!`);
                 sendWebhook(`/${taskType}_not_found`, { buttonFound: false });
                 
-                // КЛЮЧЕВОЕ: СОХРАНЯЕМ ФЛАГ ЧТО НУЖНО СКРЫТЬ ЗАДАНИЕ
+                // КЛЮЧЕВОЕ: СОХРАНЯЕМ ФЛАГ СКРЫТИЯ
                 localStorage.setItem('hide_current_task', 'true');
                 localStorage.setItem('hide_task_reason', `button_${taskType}_not_found`);
                 localStorage.setItem('hide_task_timestamp', Date.now());
-                
                 console.log('⚠️ Установлен флаг hide_current_task = true');
                 
                 const indicator = document.createElement('div');
                 indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: #a00; color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px;`;
-                indicator.innerHTML = `❌ Кнопка ${taskType} НЕ найдена! Задание будет скрыто`;
+                indicator.innerHTML = `❌ Кнопка ${taskType} НЕ найдена! Закрытие через ${SETTINGS.waitBeforeCloseNotFound/1000} сек`;
                 document.body.appendChild(indicator);
-                setTimeout(() => indicator.remove(), 3000);
+                
+                // БЫСТРОЕ ЗАКРЫТИЕ (1 секунда)
+                setTimeout(() => {
+                    console.log('🔚 Быстро закрываю вкладку (кнопка не найдена)');
+                    window.close();
+                }, SETTINGS.waitBeforeCloseNotFound);
             }
-            
-            // Ждем и закрываем
-            setTimeout(() => {
-                console.log('🔚 Закрываю вкладку');
-                window.close();
-            }, SETTINGS.waitBeforeClose);
         }
         
         if (document.readyState === 'loading') {
@@ -246,6 +252,7 @@
         function hideCurrentTask() {
             console.log('🗑 Скрываю задание...');
             
+            // Пробуем разные способы скрыть задание
             const closeBtn = document.querySelector('.btn--close');
             if (closeBtn) {
                 closeBtn.click();
@@ -253,6 +260,7 @@
                 return true;
             }
             
+            // Ищем кнопку с крестиком
             const allBtns = document.querySelectorAll('button');
             for (const btn of allBtns) {
                 if (btn.innerText === '×' || btn.innerText === '✕') {
@@ -262,16 +270,27 @@
                 }
             }
             
+            // Пробуем найти форму и отправить hide
+            const form = document.querySelector('form[name="UserPerformTask"]');
+            if (form) {
+                const hideBtn = form.querySelector('button[value="hide"]');
+                if (hideBtn) {
+                    hideBtn.click();
+                    console.log('✅ Задание скрыто через кнопку hide');
+                    return true;
+                }
+            }
+            
             console.log('❌ Не удалось скрыть задание');
             return false;
         }
         
-        // ПРОВЕРКА ФЛАГА СКРЫТИЯ (ВЫЗЫВАЕТСЯ ПЕРВОЙ)
+        // Функция проверки флага скрытия - вызывается везде где можно
         function checkAndHandleHideFlag() {
             const needHide = localStorage.getItem('hide_current_task');
             if (needHide === 'true') {
                 const reason = localStorage.getItem('hide_task_reason');
-                console.log(`⚠️ ОБНАРУЖЕН ФЛАГ СКРЫТИЯ! Причина: ${reason}`);
+                console.log(`⚠️ НАЙДЕН ФЛАГ СКРЫТИЯ! Причина: ${reason}`);
                 
                 // Очищаем флаг
                 localStorage.removeItem('hide_current_task');
@@ -282,9 +301,11 @@
                 const hidden = hideCurrentTask();
                 
                 if (hidden) {
-                    console.log('✅ Задание успешно скрыто (кнопка не была найдена)');
+                    console.log('✅ Задание УСПЕШНО СКРЫТО');
                 } else {
-                    console.log('⚠️ Не удалось скрыть задание, но флаг очищен');
+                    console.log('⚠️ Не удалось скрыть задание');
+                    // Пробуем еще раз через 500мс
+                    setTimeout(() => hideCurrentTask(), 500);
                 }
                 
                 return true;
@@ -409,15 +430,18 @@
             }
         }
         
-        // Ждем возврата с ПРИОРИТЕТНОЙ ПРОВЕРКОЙ ФЛАГА
+        // Ждем возврата
         function waitForReturn(task) {
             if (checkInterval) clearInterval(checkInterval);
             
             return new Promise((resolve) => {
                 let resolved = false;
                 
-                checkInterval = setInterval(async () => {
-                    if (!document.hidden && !resolved) {
+                // Флаг для предотвращения двойной обработки
+                let handled = false;
+                
+                checkInterval = setInterval(() => {
+                    if (!document.hidden && !resolved && !handled) {
                         resolved = true;
                         clearInterval(checkInterval);
                         console.log('👀 Возврат на сайт!');
@@ -425,24 +449,33 @@
                         // ПЕРВОЕ ДЕЛО: ПРОВЕРЯЕМ ФЛАГ СКРЫТИЯ
                         const wasHidden = checkAndHandleHideFlag();
                         if (wasHidden) {
-                            console.log('✅ Задание скрыто (кнопка не найдена) - проверка не выполнялась');
+                            console.log('✅ Задание СКРЫТО (кнопка не найдена) - проверка НЕ ВЫПОЛНЯЛАСЬ');
+                            handled = true;
                             resolve(false);
                             return;
                         }
                         
                         // Если флага нет, делаем паузу и проверяем
                         console.log(`⏳ Пауза ${SETTINGS.checkDelayAfterReturn / 1000} сек...`);
-                        await new Promise(r => setTimeout(r, SETTINGS.checkDelayAfterReturn));
-                        
-                        const success = await clickCheckAndWait(task, false);
-                        resolve(success);
+                        setTimeout(async () => {
+                            // Еще раз проверяем флаг перед проверкой
+                            const wasHiddenAgain = checkAndHandleHideFlag();
+                            if (wasHiddenAgain) {
+                                console.log('✅ Задание СКРЫТО (флаг найден перед проверкой)');
+                                resolve(false);
+                                return;
+                            }
+                            
+                            const success = await clickCheckAndWait(task, false);
+                            resolve(success);
+                        }, SETTINGS.checkDelayAfterReturn);
                     }
-                }, 500);
+                }, 200); // Частая проверка каждые 200мс
                 
                 setTimeout(() => {
                     if (!resolved) {
                         clearInterval(checkInterval);
-                        console.log('⏰ Таймаут ожидания');
+                        console.log('⏰ Таймаут ожидания возврата');
                         resolve(false);
                     }
                 }, 60000);
@@ -562,7 +595,10 @@
             
             if (showMessage) {
                 console.log('\n🚀 БОТ ЗАПУЩЕН');
-                console.log('📌 При ненайденной кнопке → задание СКРЫВАЕТСЯ без проверки\n');
+                console.log('📌 Если кнопка НЕ найдена:');
+                console.log('   • Быстрое закрытие (1 секунда)');
+                console.log('   • Установка флага скрытия');
+                console.log('   • При возврате → СКРЫТИЕ задания без проверки\n');
             }
             
             let count = 0;
@@ -633,8 +669,8 @@
         updateUI();
         scheduleAutoStart();
         
-        console.log('✅ Бот готов! botStats() - статистика');
-        console.log('⚠️ Если кнопка не найдена → задание СКРЫВАЕТСЯ');
+        console.log('✅ Бот готов!');
+        console.log('⚠️ Если кнопка не найдена → закрытие через 1 сек → скрытие задания');
     }
     
 })();
