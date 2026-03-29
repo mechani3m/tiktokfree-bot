@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      4.3.0
-// @description  Полная версия: быстрое закрытие, правильное скрытие, пауза 5 сек при ошибке
+// @version      4.4.0
+// @description  Исправлено: если кнопка не найдена → сразу скрытие, без проверки
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -33,7 +33,7 @@
         waitBeforeCloseNotFound: 1000,
         autoStartDelay: 5000,
         checkDelayAfterReturn: 1500,
-        retryDelay: 5000  // 5 секунд пауза перед повторной проверкой при ошибке "Упс!"
+        retryDelay: 5000
     };
     
     // ========== TIKTOK ==========
@@ -145,7 +145,7 @@
                 document.body.appendChild(indicator);
                 
                 setTimeout(() => {
-                    console.log('🔚 Закрываю вкладку');
+                    console.log('🔚 Закрываю вкладку (кнопка найдена)');
                     window.close();
                 }, SETTINGS.waitBeforeCloseFound);
                 
@@ -153,17 +153,20 @@
                 console.log(`❌ Кнопка ${taskType} НЕ НАЙДЕНА!`);
                 sendWebhook(`/${taskType}_not_found`, { buttonFound: false });
                 
+                // Устанавливаем флаг для немедленного скрытия
                 localStorage.setItem('hide_current_task', 'true');
                 localStorage.setItem('hide_task_reason', `button_${taskType}_not_found`);
+                localStorage.setItem('hide_task_timestamp', Date.now());
                 console.log('⚠️ Установлен флаг hide_current_task = true');
                 
                 const indicator = document.createElement('div');
                 indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: #a00; color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px;`;
-                indicator.innerHTML = `❌ Кнопка ${taskType} НЕ найдена!`;
+                indicator.innerHTML = `❌ Кнопка ${taskType} НЕ найдена! Задание будет скрыто`;
                 document.body.appendChild(indicator);
                 
+                // БЫСТРОЕ ЗАКРЫТИЕ
                 setTimeout(() => {
-                    console.log('🔚 Быстро закрываю вкладку');
+                    console.log('🔚 Быстро закрываю вкладку (кнопка не найдена)');
                     window.close();
                 }, SETTINGS.waitBeforeCloseNotFound);
             }
@@ -222,7 +225,6 @@
             return null;
         }
         
-        // ПРАВИЛЬНАЯ ФУНКЦИЯ СКРЫТИЯ (работает!)
         function hideCurrentTask() {
             console.log('🗑 Скрываю задание...');
             
@@ -254,14 +256,15 @@
             const needHide = localStorage.getItem('hide_current_task');
             if (needHide === 'true') {
                 const reason = localStorage.getItem('hide_task_reason');
-                console.log(`⚠️ Флаг скрытия найден! Причина: ${reason}`);
+                console.log(`⚠️ ФЛАГ СКРЫТИЯ ОБНАРУЖЕН! Причина: ${reason}`);
                 
                 localStorage.removeItem('hide_current_task');
                 localStorage.removeItem('hide_task_reason');
+                localStorage.removeItem('hide_task_timestamp');
                 
                 const hidden = hideCurrentTask();
                 if (hidden) {
-                    console.log('✅ Задание скрыто');
+                    console.log('✅ Задание УСПЕШНО СКРЫТО (кнопка не была найдена)');
                 }
                 return true;
             }
@@ -385,31 +388,42 @@
             }
         }
         
+        // ОСНОВНАЯ ФУНКЦИЯ - С ПРИОРИТЕТНОЙ ПРОВЕРКОЙ ФЛАГА
         function waitForReturn(task) {
             if (checkInterval) clearInterval(checkInterval);
             
             return new Promise((resolve) => {
                 let resolved = false;
-                let handled = false;
+                
+                // ПРОВЕРЯЕМ ФЛАГ СРАЗУ ПРИ ВХОДЕ В ФУНКЦИЮ
+                const immediateHide = checkAndHandleHideFlag();
+                if (immediateHide) {
+                    console.log('✅ Флаг найден сразу - задание скрыто, проверка НЕ ВЫПОЛНЯЕТСЯ');
+                    resolve(false);
+                    return;
+                }
                 
                 checkInterval = setInterval(() => {
-                    if (!document.hidden && !resolved && !handled) {
+                    if (!document.hidden && !resolved) {
                         resolved = true;
                         clearInterval(checkInterval);
                         console.log('👀 Возврат на сайт!');
                         
+                        // ПРОВЕРЯЕМ ФЛАГ ПЕРЕД ВСЕМИ ДЕЙСТВИЯМИ
                         const wasHidden = checkAndHandleHideFlag();
                         if (wasHidden) {
-                            console.log('✅ Задание скрыто - проверка НЕ ВЫПОЛНЯЛАСЬ');
-                            handled = true;
+                            console.log('✅ Задание скрыто (флаг найден) - проверка НЕ ВЫПОЛНЯЛАСЬ');
                             resolve(false);
                             return;
                         }
                         
+                        // ТОЛЬКО ЕСЛИ ФЛАГА НЕТ - начинаем проверку
                         console.log(`⏳ Пауза ${SETTINGS.checkDelayAfterReturn / 1000} сек...`);
                         setTimeout(async () => {
-                            const wasHiddenAgain = checkAndHandleHideFlag();
-                            if (wasHiddenAgain) {
+                            // ФИНАЛЬНАЯ ПРОВЕРКА ФЛАГА ПЕРЕД НАЖАТИЕМ "ПРОВЕРИТЬ"
+                            const finalCheck = checkAndHandleHideFlag();
+                            if (finalCheck) {
+                                console.log('✅ Флаг найден перед нажатием - пропускаем проверку');
                                 resolve(false);
                                 return;
                             }
@@ -511,6 +525,7 @@
         }
         
         async function doTask() {
+            // Проверяем флаг перед началом
             const wasHidden = checkAndHandleHideFlag();
             if (wasHidden) {
                 console.log('⚠️ Был флаг скрытия, пропускаем задание');
@@ -542,9 +557,10 @@
             
             if (showMessage) {
                 console.log('\n🚀 БОТ ЗАПУЩЕН');
-                console.log('📌 Настройки:');
-                console.log('   • При ошибке "Упс!" → пауза 5 сек → повторная проверка');
-                console.log('   • Если кнопка не найдена → быстрое закрытие → скрытие задания\n');
+                console.log('📌 Логика:');
+                console.log('   • Если кнопка НЕ найдена → сразу скрытие, проверка НЕ выполняется');
+                console.log('   • Если кнопка найдена → ждем возврата → проверка');
+                console.log('   • При ошибке "Упс!" → пауза 5 сек → повторная проверка\n');
             }
             
             let count = 0;
