@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      4.4.0
-// @description  Исправлено: если кнопка не найдена → сразу скрытие, без проверки
+// @version      4.5.0
+// @description  Исправлено: гарантированная передача статуса "кнопка не найдена"
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -15,6 +15,7 @@
 // @grant        GM_getValue
 // @grant        GM_deleteValue
 // @connect      trigger.macrodroid.com
+// @connect      tiktop-free.com
 // @downloadURL  https://raw.githubusercontent.com/mechani3m/tiktokfree-bot/main/tiktokfree-bot.user.js
 // @updateURL    https://raw.githubusercontent.com/mechani3m/tiktokfree-bot/main/tiktokfree-bot.user.js
 // @run-at       document-start
@@ -30,7 +31,7 @@
     const SETTINGS = {
         webhookUrl: GM_getValue('webhookUrl', 'https://trigger.macrodroid.com/e4e9515c-9214-454b-83c2-f81eb88e356d'),
         waitBeforeCloseFound: 15000,
-        waitBeforeCloseNotFound: 1000,
+        waitBeforeCloseNotFound: 500,  // 0.5 секунды
         autoStartDelay: 5000,
         checkDelayAfterReturn: 1500,
         retryDelay: 5000
@@ -42,6 +43,7 @@
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || localStorage.getItem('current_task_type') || 'follow';
+        let buttonFound = false;
         
         function delay(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
@@ -60,9 +62,22 @@
                     url: location.href,
                     taskType: taskType,
                     ...data
-                }),
+                })
+            });
+        }
+        
+        // ОТПРАВКА СТАТУСА НА САЙТ ЧЕРЕЗ POST
+        function sendStatusToSite(status, reason) {
+            const statusUrl = 'https://tiktop-free.com/wp-admin/admin-ajax.php';
+            console.log(`📡 Отправка статуса на сайт: ${status}`);
+            
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: statusUrl,
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                data: `action=tikbot_status&status=${status}&reason=${reason}&task_type=${taskType}&t=${Date.now()}`,
                 onload: function(res) {
-                    console.log(`✅ Вебхук ${action} отправлен, статус: ${res.status}`);
+                    console.log(`✅ Статус отправлен на сайт, ответ: ${res.status}`);
                 }
             });
         }
@@ -135,9 +150,10 @@
             }
             
             if (button) {
+                buttonFound = true;
                 console.log(`✅ Кнопка ${taskType} найдена!`);
                 sendWebhook(`/${taskType}`, { buttonFound: true });
-                localStorage.removeItem('hide_current_task');
+                sendStatusToSite('found', '');
                 
                 const indicator = document.createElement('div');
                 indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: #0a0; color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px;`;
@@ -150,18 +166,22 @@
                 }, SETTINGS.waitBeforeCloseFound);
                 
             } else {
+                buttonFound = false;
                 console.log(`❌ Кнопка ${taskType} НЕ НАЙДЕНА!`);
                 sendWebhook(`/${taskType}_not_found`, { buttonFound: false });
                 
-                // Устанавливаем флаг для немедленного скрытия
+                // ОТПРАВЛЯЕМ СТАТУС НА САЙТ ЧТО КНОПКИ НЕТ
+                sendStatusToSite('not_found', `button_${taskType}_not_found`);
+                
+                // ТАКЖЕ СОХРАНЯЕМ В localStorage (на всякий случай)
                 localStorage.setItem('hide_current_task', 'true');
                 localStorage.setItem('hide_task_reason', `button_${taskType}_not_found`);
-                localStorage.setItem('hide_task_timestamp', Date.now());
-                console.log('⚠️ Установлен флаг hide_current_task = true');
+                sessionStorage.setItem('hide_current_task', 'true');
+                console.log('⚠️ Статус "кнопка не найдена" отправлен на сайт');
                 
                 const indicator = document.createElement('div');
                 indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: #a00; color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px;`;
-                indicator.innerHTML = `❌ Кнопка ${taskType} НЕ найдена! Задание будет скрыто`;
+                indicator.innerHTML = `❌ Кнопка ${taskType} НЕ найдена!`;
                 document.body.appendChild(indicator);
                 
                 // БЫСТРОЕ ЗАКРЫТИЕ
@@ -194,6 +214,9 @@
         let checkInterval = null;
         let retryCount = 0;
         const MAX_RETRY = 2;
+        
+        // Флаг для предотвращения проверки если кнопка не найдена
+        let pendingHide = false;
         
         const savedStats = GM_getValue('botStats', null);
         if (savedStats) {
@@ -253,22 +276,51 @@
         }
         
         function checkAndHandleHideFlag() {
+            // Проверяем флаг из переменной
+            if (pendingHide) {
+                console.log('⚠️ pendingHide = true, скрываю задание');
+                pendingHide = false;
+                hideCurrentTask();
+                return true;
+            }
+            
+            // Проверяем localStorage
             const needHide = localStorage.getItem('hide_current_task');
             if (needHide === 'true') {
                 const reason = localStorage.getItem('hide_task_reason');
-                console.log(`⚠️ ФЛАГ СКРЫТИЯ ОБНАРУЖЕН! Причина: ${reason}`);
-                
+                console.log(`⚠️ Флаг из localStorage! Причина: ${reason}`);
                 localStorage.removeItem('hide_current_task');
                 localStorage.removeItem('hide_task_reason');
-                localStorage.removeItem('hide_task_timestamp');
-                
-                const hidden = hideCurrentTask();
-                if (hidden) {
-                    console.log('✅ Задание УСПЕШНО СКРЫТО (кнопка не была найдена)');
-                }
+                hideCurrentTask();
                 return true;
             }
+            
+            // Проверяем sessionStorage
+            const sessionHide = sessionStorage.getItem('hide_current_task');
+            if (sessionHide === 'true') {
+                console.log('⚠️ Флаг из sessionStorage!');
+                sessionStorage.removeItem('hide_current_task');
+                hideCurrentTask();
+                return true;
+            }
+            
             return false;
+        }
+        
+        // СЛУШАЕМ POST ЗАПРОСЫ ОТ TIKTOK
+        if (typeof GM_xmlhttpRequest !== 'undefined') {
+            // Создаем обработчик для получения статуса
+            const originalFetch = window.fetch;
+            window.fetch = function(...args) {
+                if (args[0] && typeof args[0] === 'string' && args[0].includes('tikbot_status')) {
+                    console.log('📡 Получен статус от TikTok:', args[1]?.body);
+                    if (args[1]?.body && args[1].body.includes('not_found')) {
+                        console.log('⚠️ Кнопка не найдена! Устанавливаю pendingHide');
+                        pendingHide = true;
+                    }
+                }
+                return originalFetch.apply(this, args);
+            };
         }
         
         function waitForToast(timeout = 15000) {
@@ -388,17 +440,15 @@
             }
         }
         
-        // ОСНОВНАЯ ФУНКЦИЯ - С ПРИОРИТЕТНОЙ ПРОВЕРКОЙ ФЛАГА
         function waitForReturn(task) {
             if (checkInterval) clearInterval(checkInterval);
             
             return new Promise((resolve) => {
                 let resolved = false;
                 
-                // ПРОВЕРЯЕМ ФЛАГ СРАЗУ ПРИ ВХОДЕ В ФУНКЦИЮ
-                const immediateHide = checkAndHandleHideFlag();
-                if (immediateHide) {
-                    console.log('✅ Флаг найден сразу - задание скрыто, проверка НЕ ВЫПОЛНЯЕТСЯ');
+                // ПРОВЕРЯЕМ СРАЗУ
+                if (checkAndHandleHideFlag()) {
+                    console.log('✅ Скрытие при входе - проверка НЕ ВЫПОЛНЯЕТСЯ');
                     resolve(false);
                     return;
                 }
@@ -409,21 +459,18 @@
                         clearInterval(checkInterval);
                         console.log('👀 Возврат на сайт!');
                         
-                        // ПРОВЕРЯЕМ ФЛАГ ПЕРЕД ВСЕМИ ДЕЙСТВИЯМИ
-                        const wasHidden = checkAndHandleHideFlag();
-                        if (wasHidden) {
-                            console.log('✅ Задание скрыто (флаг найден) - проверка НЕ ВЫПОЛНЯЛАСЬ');
+                        // ПРОВЕРЯЕМ ПЕРЕД ВСЕМ
+                        if (checkAndHandleHideFlag()) {
+                            console.log('✅ Задание скрыто - проверка НЕ ВЫПОЛНЯЛАСЬ');
                             resolve(false);
                             return;
                         }
                         
-                        // ТОЛЬКО ЕСЛИ ФЛАГА НЕТ - начинаем проверку
                         console.log(`⏳ Пауза ${SETTINGS.checkDelayAfterReturn / 1000} сек...`);
                         setTimeout(async () => {
-                            // ФИНАЛЬНАЯ ПРОВЕРКА ФЛАГА ПЕРЕД НАЖАТИЕМ "ПРОВЕРИТЬ"
-                            const finalCheck = checkAndHandleHideFlag();
-                            if (finalCheck) {
-                                console.log('✅ Флаг найден перед нажатием - пропускаем проверку');
+                            // ПОСЛЕДНЯЯ ПРОВЕРКА
+                            if (checkAndHandleHideFlag()) {
+                                console.log('✅ Флаг найден перед проверкой - пропускаем');
                                 resolve(false);
                                 return;
                             }
@@ -444,7 +491,7 @@
             });
         }
         
-        // Создаем панель
+        // Создаем панель (та же самая)
         const panel = document.createElement('div');
         panel.style.cssText = `
             position: fixed;
@@ -525,9 +572,7 @@
         }
         
         async function doTask() {
-            // Проверяем флаг перед началом
-            const wasHidden = checkAndHandleHideFlag();
-            if (wasHidden) {
+            if (checkAndHandleHideFlag()) {
                 console.log('⚠️ Был флаг скрытия, пропускаем задание');
                 return false;
             }
@@ -558,9 +603,8 @@
             if (showMessage) {
                 console.log('\n🚀 БОТ ЗАПУЩЕН');
                 console.log('📌 Логика:');
-                console.log('   • Если кнопка НЕ найдена → сразу скрытие, проверка НЕ выполняется');
-                console.log('   • Если кнопка найдена → ждем возврата → проверка');
-                console.log('   • При ошибке "Упс!" → пауза 5 сек → повторная проверка\n');
+                console.log('   • Если кнопка НЕ найдена → сайт получает статус → СРАЗУ скрытие');
+                console.log('   • Проверка "Проверить" НЕ выполняется\n');
             }
             
             let count = 0;
