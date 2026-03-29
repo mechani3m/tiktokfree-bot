@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      4.6.0
+// @version      4.7.0
 // @description  Гарантированное скрытие задания если кнопка не найдена (GM_setValue + Beacon)
 // @author       mechani3m (исправленная версия)
 // @match        https://tiktop-free.com/tasks/*
