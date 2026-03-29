@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot Fixed
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      4.5.1
+// @version      4.7.1
 // @description  Исправлено: приоритетное скрытие задания при отсутствии кнопок лайка/подписки
 // @author       mechani3m & Gemini
 // @match        https://tiktop-free.com/tasks/*
