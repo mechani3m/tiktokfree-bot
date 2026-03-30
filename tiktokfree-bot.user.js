@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      7.1.0
-// @description  Сбалансированная версия: нормальные паузы
+// @version      7.2.0
+// @description  Автоматическое удаление тостов после обработки
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -26,31 +26,21 @@
     const isTikTok = location.hostname.includes('tiktok.com');
     const isTikTopFree = location.hostname.includes('tiktop-free.com');
     
-    // ========== НАСТРОЙКИ (НОРМАЛЬНЫЕ ПАУЗЫ) ==========
+    // ========== НАСТРОЙКИ ==========
     const SETTINGS = {
         webhookUrl: GM_getValue('webhookUrl', 'https://trigger.macrodroid.com/e4e9515c-9214-454b-83c2-f81eb88e356d'),
-        
-        // Время ожидания в TikTok
-        waitAfterFound: 15000,        // 15 секунд если кнопка найдена (MacroDroid успеет нажать)
-        waitAfterNotFound: 3000,      // 3 секунды если кнопка не найдена (успеваем отправить статус)
-        
-        // Поиск кнопки
-        searchAttempts: 10,           // 10 попыток
-        searchInterval: 500,          // каждые 500мс = 5 секунд максимум
-        
-        // Автозапуск
-        autoStartDelay: 5000,         // 5 секунд перед автозапуском
-        
-        // После возврата на сайт
-        checkDelayAfterReturn: 2000,  // 2 секунды паузы перед проверкой
-        
-        // При ошибке "Упс!"
-        retryDelay: 5000              // 5 секунд перед повторной проверкой
+        waitAfterFound: 15000,
+        waitAfterNotFound: 3000,
+        autoStartDelay: 5000,
+        checkDelayAfterReturn: 2000,
+        retryDelay: 5000,
+        searchAttempts: 10,
+        searchInterval: 500
     };
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v7.1 запущен');
+        console.log('🎯 TikTok Bot v7.2 запущен');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -78,7 +68,6 @@
             console.log('📡 Отправка статуса скрытия...');
             GM_setValue('hide_current_task', 'true');
             GM_setValue('hide_task_reason', `button_${taskType}_not_found`);
-            GM_setValue('hide_task_timestamp', Date.now());
             sessionStorage.setItem('hide_current_task', 'true');
             localStorage.setItem('hide_current_task', 'true');
         }
@@ -88,33 +77,24 @@
                 '[data-e2e="follow-button"]',
                 'button[aria-label*="Подписаться"]',
                 'button[aria-label*="Follow"]',
-                'button[class*="follow"]',
-                'div[data-e2e="follow-button"] button'
+                'button[class*="follow"]'
             ];
             
             for (let attempt = 0; attempt < SETTINGS.searchAttempts; attempt++) {
                 for (const selector of selectors) {
                     try {
                         const btn = document.querySelector(selector);
-                        if (btn && btn.offsetParent !== null) {
-                            console.log(`✅ Кнопка подписки найдена на попытке ${attempt + 1}`);
-                            return btn;
-                        }
+                        if (btn && btn.offsetParent !== null) return btn;
                     } catch(e) {}
                 }
                 
                 const buttons = document.querySelectorAll('button');
                 for (const btn of buttons) {
                     const text = btn.innerText?.toLowerCase() || '';
-                    if (text.includes('подписаться') || text.includes('follow')) {
-                        console.log(`✅ Кнопка подписки найдена по тексту на попытке ${attempt + 1}`);
-                        return btn;
-                    }
+                    if (text.includes('подписаться') || text.includes('follow')) return btn;
                 }
                 
-                if (attempt < SETTINGS.searchAttempts - 1) {
-                    await delay(SETTINGS.searchInterval);
-                }
+                if (attempt < SETTINGS.searchAttempts - 1) await delay(SETTINGS.searchInterval);
             }
             return null;
         }
@@ -124,46 +104,32 @@
                 '[data-e2e="like-button"]',
                 'button[aria-label*="Нравится"]',
                 'button[aria-label*="Like"]',
-                'span[data-e2e="like-icon"]',
-                '[data-e2e*="like"]'
+                'span[data-e2e="like-icon"]'
             ];
             
             for (let attempt = 0; attempt < SETTINGS.searchAttempts; attempt++) {
                 for (const selector of selectors) {
                     try {
                         const btn = document.querySelector(selector);
-                        if (btn && btn.offsetParent !== null) {
-                            console.log(`✅ Кнопка лайка найдена на попытке ${attempt + 1}`);
-                            return btn;
-                        }
+                        if (btn && btn.offsetParent !== null) return btn;
                     } catch(e) {}
                 }
                 
                 const buttons = document.querySelectorAll('button');
                 for (const btn of buttons) {
                     const text = btn.innerText?.toLowerCase() || '';
-                    if (text.includes('нравится') || text.includes('like')) {
-                        console.log(`✅ Кнопка лайка найдена по тексту на попытке ${attempt + 1}`);
-                        return btn;
-                    }
+                    if (text.includes('нравится') || text.includes('like')) return btn;
                 }
                 
-                if (attempt < SETTINGS.searchAttempts - 1) {
-                    await delay(SETTINGS.searchInterval);
-                }
+                if (attempt < SETTINGS.searchAttempts - 1) await delay(SETTINGS.searchInterval);
             }
             return null;
         }
         
         async function run() {
-            console.log('🔍 Начинаю поиск кнопки...');
-            console.log(`⏳ Максимальное время поиска: ${(SETTINGS.searchAttempts * SETTINGS.searchInterval) / 1000} секунд`);
-            
-            // Ждем начальной загрузки страницы
             await delay(1500);
             
             let button = null;
-            
             if (taskType === 'follow') {
                 button = await findFollowButton();
             } else {
@@ -175,37 +141,26 @@
                 sendWebhook(`/${taskType}`, { buttonFound: true });
                 
                 const indicator = document.createElement('div');
-                indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: #0a0; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: bold;`;
+                indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: #0a0; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 14px;`;
                 indicator.innerHTML = `✅ Кнопка найдена! Ждем ${SETTINGS.waitAfterFound / 1000} сек`;
                 document.body.appendChild(indicator);
                 
-                console.log(`⏳ Ждем ${SETTINGS.waitAfterFound / 1000} секунд перед закрытием...`);
-                setTimeout(() => {
-                    console.log('🔚 Закрываю вкладку (кнопка найдена)');
-                    window.close();
-                }, SETTINGS.waitAfterFound);
+                setTimeout(() => window.close(), SETTINGS.waitAfterFound);
                 
             } else {
-                console.log(`❌ Кнопка ${taskType} НЕ НАЙДЕНА за ${(SETTINGS.searchAttempts * SETTINGS.searchInterval) / 1000} секунд`);
+                console.log(`❌ Кнопка ${taskType} НЕ НАЙДЕНА`);
                 sendWebhook(`/${taskType}_not_found`, { buttonFound: false });
-                
-                // Отправляем статус скрытия
                 sendHideStatus();
                 
                 const indicator = document.createElement('div');
-                indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: #a00; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: bold;`;
+                indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: #a00; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 14px;`;
                 indicator.innerHTML = `❌ Кнопка НЕ найдена! Ждем ${SETTINGS.waitAfterNotFound / 1000} сек`;
                 document.body.appendChild(indicator);
                 
-                console.log(`⏳ Ждем ${SETTINGS.waitAfterNotFound / 1000} секунд перед закрытием...`);
-                setTimeout(() => {
-                    console.log('🔚 Закрываю вкладку (кнопка не найдена)');
-                    window.close();
-                }, SETTINGS.waitAfterNotFound);
+                setTimeout(() => window.close(), SETTINGS.waitAfterNotFound);
             }
         }
         
-        // Запускаем после загрузки DOM
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', run);
         } else {
@@ -217,7 +172,7 @@
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v7.1 запущен');
+        console.log('🤖 TikTokFree Bot v7.2 запущен');
         
         let running = false;
         let autoStartTimer = null;
@@ -231,6 +186,68 @@
         
         function saveStats() {
             GM_setValue('botStats', stats);
+        }
+        
+        // ========== ФУНКЦИЯ УДАЛЕНИЯ ТОСТА (СВАЙП) ==========
+        function dismissToast(toast) {
+            if (!toast || !document.body.contains(toast)) return;
+            
+            console.log('🗑️ Удаляю тост:', toast.innerText?.substring(0, 50));
+            
+            const closeBtn = toast.querySelector('.toast-close, .close, [aria-label="Close"], button');
+            if (closeBtn) {
+                closeBtn.click();
+                console.log('✅ Тост закрыт через кнопку');
+                return;
+            }
+            
+            try {
+                const rect = toast.getBoundingClientRect();
+                const startX = rect.left + rect.width / 2;
+                const startY = rect.top + rect.height / 2;
+                
+                const touchStart = new TouchEvent('touchstart', {
+                    touches: [new Touch({
+                        identifier: Date.now(),
+                        target: toast,
+                        clientX: startX,
+                        clientY: startY,
+                        radiusX: 2.5,
+                        radiusY: 2.5,
+                        force: 0.5
+                    })]
+                });
+                
+                const touchEnd = new TouchEvent('touchend', {
+                    changedTouches: [new Touch({
+                        identifier: Date.now(),
+                        target: toast,
+                        clientX: startX + 200,
+                        clientY: startY,
+                        radiusX: 2.5,
+                        radiusY: 2.5,
+                        force: 0.5
+                    })]
+                });
+                
+                toast.dispatchEvent(touchStart);
+                setTimeout(() => toast.dispatchEvent(touchEnd), 50);
+                console.log('👉 Свайп выполнен');
+                
+                setTimeout(() => {
+                    if (document.body.contains(toast)) {
+                        toast.style.transform = 'translateX(100%)';
+                        toast.style.opacity = '0';
+                        toast.style.transition = 'all 0.3s ease';
+                        setTimeout(() => toast.remove(), 300);
+                        console.log('🗑️ Тост удален принудительно');
+                    }
+                }, 300);
+                
+            } catch(e) {
+                console.log('⚠️ Ошибка свайпа:', e);
+                toast.remove();
+            }
         }
         
         function getTaskType() {
@@ -260,18 +277,15 @@
             
             if (gmHide === 'true' || sessionHide === 'true' || localHide === 'true') {
                 console.log('⚠️ НАЙДЕН ФЛАГ СКРЫТИЯ!');
-                
-                // Очищаем
                 GM_deleteValue('hide_current_task');
-                GM_deleteValue('hide_task_reason');
                 sessionStorage.removeItem('hide_current_task');
                 localStorage.removeItem('hide_current_task');
-                
                 return true;
             }
             return false;
         }
         
+        // ОБНОВЛЕННАЯ ФУНКЦИЯ WAITFORTOAST С УДАЛЕНИЕМ ТОСТОВ
         function waitForToast(timeout = 15000) {
             return new Promise((resolve) => {
                 const checkToasts = () => {
@@ -279,9 +293,11 @@
                     for (const toast of toasts) {
                         const text = toast.innerText;
                         if (text.includes('успешно') || text.includes('зачислено')) {
+                            setTimeout(() => dismissToast(toast), 500);
                             return { success: true, text };
                         }
                         if (text.includes('Упс') || text.includes('не выполнили')) {
+                            setTimeout(() => dismissToast(toast), 500);
                             return { success: false, error: true, text };
                         }
                     }
@@ -311,13 +327,13 @@
         }
         
         async function clickCheck(task, isRetry = false) {
-            console.log(`🔍 Проверка задания (${isRetry ? 'повторная' : 'первая'})...`);
+            console.log(`🔍 Проверка (${isRetry ? 'повторная' : 'первая'})...`);
             
             const checkBtn = document.querySelector('.btn--check');
             if (!checkBtn) return false;
             
             checkBtn.click();
-            console.log('🔘 Кнопка "Проверить" нажата');
+            console.log('🔘 "Проверить" нажата');
             
             const result = await waitForToast(15000);
             
@@ -328,7 +344,6 @@
                 saveStats();
                 updateUI();
                 
-                // Звук
                 try {
                     const audio = new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3');
                     audio.volume = 0.3;
@@ -341,7 +356,6 @@
                     timeout: 3000
                 });
                 
-                // Скрываем задание
                 const hideData = new FormData();
                 hideData.append('UserPerformTask[id]', task.id);
                 hideData.append('UserPerformTask[task_execution_id]', task.execId);
@@ -367,7 +381,7 @@
                     retryCount = 0;
                     return false;
                 } else {
-                    console.log(`🔄 Пауза ${SETTINGS.retryDelay / 1000} секунд, затем повторная проверка...`);
+                    console.log(`🔄 Пауза ${SETTINGS.retryDelay / 1000} секунд...`);
                     retryCount++;
                     await new Promise(r => setTimeout(r, SETTINGS.retryDelay));
                     return await clickCheck(task, true);
@@ -388,7 +402,6 @@
                         clearInterval(interval);
                         console.log('👀 Возврат на сайт!');
                         
-                        // Проверяем флаг скрытия
                         if (shouldHideTask()) {
                             console.log('✅ Флаг найден! Скрываю задание без проверки');
                             hideCurrentTask();
@@ -396,8 +409,7 @@
                             return;
                         }
                         
-                        // Пауза перед проверкой
-                        console.log(`⏳ Пауза ${SETTINGS.checkDelayAfterReturn / 1000} секунд перед проверкой...`);
+                        console.log(`⏳ Пауза ${SETTINGS.checkDelayAfterReturn / 1000} секунд...`);
                         setTimeout(async () => {
                             const success = await clickCheck(task, false);
                             resolve(success);
@@ -408,7 +420,6 @@
                 setTimeout(() => {
                     if (!resolved) {
                         clearInterval(interval);
-                        console.log('⏰ Таймаут ожидания возврата (60 секунд)');
                         resolve(false);
                     }
                 }, 60000);
@@ -442,7 +453,6 @@
         }
         
         async function doTask() {
-            // Проверяем флаг перед началом
             if (shouldHideTask()) {
                 console.log('⚠️ Был флаг скрытия, пропускаем задание');
                 return false;
@@ -454,8 +464,7 @@
             console.log(`\n🎯 ${task.taskType.name} | Награда: +${task.reward} монет`);
             clickExecute(task.executeUrl, task.taskType);
             
-            const success = await waitForReturn(task);
-            return success;
+            return await waitForReturn(task);
         }
         
         // UI панель
@@ -504,13 +513,8 @@
             running = true;
             updateUI();
             
-            console.log('\n🚀 БОТ ЗАПУЩЕН v7.1');
-            console.log('📌 Настройки пауз:');
-            console.log(`   • Поиск кнопки: до ${(SETTINGS.searchAttempts * SETTINGS.searchInterval) / 1000} секунд`);
-            console.log(`   • Если кнопка найдена: ждем ${SETTINGS.waitAfterFound / 1000} секунд`);
-            console.log(`   • Если кнопка НЕ найдена: ждем ${SETTINGS.waitAfterNotFound / 1000} секунд`);
-            console.log(`   • После возврата: пауза ${SETTINGS.checkDelayAfterReturn / 1000} секунд`);
-            console.log(`   • При ошибке "Упс!": пауза ${SETTINGS.retryDelay / 1000} секунд\n`);
+            console.log('\n🚀 БОТ ЗАПУЩЕН v7.2');
+            console.log('📌 Тосты автоматически удаляются после обработки\n');
             
             let count = 0;
             while (running && count < 100) {
@@ -519,7 +523,7 @@
                 await new Promise(r => setTimeout(r, 2000));
                 
                 if (!document.querySelector('.task-item--wrapper')) {
-                    console.log('📭 Задания кончились, обновляю страницу...');
+                    console.log('📭 Задания кончились, обновляю...');
                     setTimeout(() => location.reload(), 2000);
                     break;
                 }
@@ -527,14 +531,14 @@
             
             running = false;
             updateUI();
-            console.log(`\n🏁 БОТ ОСТАНОВЛЕН | Выполнено: ${stats.completed} | Заработано: ${stats.earned.toFixed(2)}`);
+            console.log(`\n🏁 ОСТАНОВЛЕН | Выполнено: ${stats.completed} | Заработано: ${stats.earned.toFixed(2)}`);
         }
         
         function stopBot() {
             running = false;
             if (checkInterval) clearInterval(checkInterval);
             if (autoStartTimer) clearTimeout(autoStartTimer);
-            console.log('🛑 Бот остановлен');
+            console.log('🛑 Остановлен');
             updateUI();
         }
         
@@ -553,11 +557,11 @@
         
         updateUI();
         
-        // Автозапуск
         autoStartTimer = setTimeout(() => {
             if (!running) startBot();
         }, SETTINGS.autoStartDelay);
         
         console.log('✅ Бот готов! botStats() - статистика');
+        console.log('📱 Тосты будут автоматически удаляться после обработки');
     }
 })();
