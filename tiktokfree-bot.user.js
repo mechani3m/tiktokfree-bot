@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      7.2.0
-// @description  Автоматическое выполнение заданий + свайп тостов
+// @version      7.6.0
+// @description  Финальная версия: вебхуки с ретраями, свайп тостов, автозапуск, статистика
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -35,12 +35,14 @@
         checkDelayAfterReturn: 2000,
         retryDelay: 5000,
         searchAttempts: 10,
-        searchInterval: 500
+        searchInterval: 500,
+        webhookTimeout: 10000,
+        webhookMaxRetries: 3
     };
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v7.2 запущен');
+        console.log('🎯 TikTok Bot v7.6 запущен');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -49,23 +51,60 @@
             return new Promise(resolve => setTimeout(resolve, ms));
         }
         
-        function sendWebhook(action, data) {
+        // Вебхук с ретраями
+        function sendWebhook(action, payload = {}, attempt = 1) {
             const url = SETTINGS.webhookUrl + action;
+            
+            const data = {
+                timestamp: Date.now(),
+                url: location.href,
+                taskType: taskType,
+                ...payload
+            };
+            
+            console.log(`📡 Отправка вебхука: ${action} (попытка ${attempt}/${SETTINGS.webhookMaxRetries})`);
+            
             GM_xmlhttpRequest({
                 method: 'POST',
                 url: url,
+                timeout: SETTINGS.webhookTimeout,
                 headers: { 'Content-Type': 'application/json' },
-                data: JSON.stringify({
-                    timestamp: Date.now(),
-                    url: location.href,
-                    taskType: taskType,
-                    ...data
-                })
+                data: JSON.stringify(data),
+                
+                onload: function(res) {
+                    if (res.status >= 200 && res.status < 300) {
+                        console.log(`✅ Вебхук ${action} успешно отправлен, статус: ${res.status}`);
+                    } else {
+                        console.log(`⚠️ Вебхук ${action} вернул ошибку, статус: ${res.status}`);
+                        retry();
+                    }
+                },
+                
+                onerror: function(e) {
+                    console.log(`❌ Ошибка отправки вебхука ${action}:`, e);
+                    retry();
+                },
+                
+                ontimeout: function() {
+                    console.log(`⏳ Таймаут отправки вебхука ${action}`);
+                    retry();
+                }
             });
+            
+            function retry() {
+                if (attempt < SETTINGS.webhookMaxRetries) {
+                    const delayMs = 2000 * attempt;
+                    console.log(`🔁 Повторная отправка через ${delayMs/1000} сек (попытка ${attempt + 1})`);
+                    setTimeout(() => {
+                        sendWebhook(action, payload, attempt + 1);
+                    }, delayMs);
+                } else {
+                    console.log(`❌ Вебхук ${action} не отправлен после ${SETTINGS.webhookMaxRetries} попыток`);
+                }
+            }
         }
         
         function sendHideStatus() {
-            console.log('📡 Отправка статуса скрытия...');
             GM_setValue('hide_current_task', 'true');
             GM_setValue('hide_task_reason', `button_${taskType}_not_found`);
             sessionStorage.setItem('hide_current_task', 'true');
@@ -172,7 +211,7 @@
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v7.2 запущен');
+        console.log('🤖 TikTokFree Bot v7.6 запущен');
         
         let running = false;
         let autoStartTimer = null;
@@ -188,7 +227,6 @@
             GM_setValue('botStats', stats);
         }
         
-        // Удаление тоста (свайп)
         function dismissToast(toast) {
             if (!toast || !document.body.contains(toast)) return;
             
@@ -292,12 +330,11 @@
             const result = await waitForToast(15000);
             
             if (result.success) {
+                console.log(`✅ ВЫПОЛНЕНО! +${task.reward} монет`);
                 stats.completed++;
                 stats.earned += task.reward;
                 saveStats();
                 updateUI();
-                
-                try { new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3').play(); } catch(e) {}
                 
                 GM_notification({ title: '✅ Выполнено!', text: `+${task.reward} монет. Всего: ${stats.completed}`, timeout: 3000 });
                 
@@ -388,7 +425,7 @@
         panel.style.cssText = `position: fixed; bottom: 20px; right: 20px; z-index: 9999; background: linear-gradient(135deg, #667eea, #764ba2); padding: 12px; border-radius: 12px; color: white; font-family: monospace; font-size: 12px; min-width: 220px; box-shadow: 0 2px 10px rgba(0,0,0,0.3);`;
         panel.innerHTML = `
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <b>🤖 TikTokFree Bot</b>
+                <b>🤖 TikTokFree Bot v7.6</b>
                 <span id="bot-status" style="background: #f44336; padding: 2px 8px; border-radius: 20px;">СТОП</span>
             </div>
             <div>💰 Баланс: <span id="balance">0</span></div>
@@ -415,7 +452,9 @@
             if (running) return;
             running = true;
             updateUI();
-            console.log('\n🚀 БОТ ЗАПУЩЕН v7.2 | Тосты удаляются автоматически\n');
+            console.log('\n🚀 БОТ ЗАПУЩЕН v7.6');
+            console.log('📡 Вебхуки: до 3 попыток с экспоненциальной задержкой');
+            console.log('🗑️ Тосты автоматически удаляются\n');
             
             let count = 0;
             while (running && count < 100) {
