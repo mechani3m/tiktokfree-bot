@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      8.0.0
-// @description  Исправлены селекторы для кнопки лайка (актуальная структура TikTok)
+// @version      8.1.0
+// @description  Обработка всех ошибок, 3 попытки, увеличенные таймауты
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -33,17 +33,19 @@
         waitAfterNotFound: 3000,
         autoStartDelay: 5000,
         checkDelayAfterReturn: 2000,
-        retryDelay: 5000,
+        retryDelay: 5000,           // 5 секунд между попытками
+        maxRetries: 3,              // Максимум 3 попытки проверки
         searchAttempts: 10,
         searchInterval: 500,
         webhookTimeout: 10000,
         webhookMaxRetries: 3,
-        hideFlagTimeout: 5000
+        hideFlagTimeout: 5000,
+        toastTimeout: 20000         // Увеличен до 20 секунд
     };
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v8.0 запущен');
+        console.log('🎯 TikTok Bot v8.1 запущен');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -137,7 +139,6 @@
             return null;
         }
         
-        // ИСПРАВЛЕННАЯ ФУНКЦИЯ ПОИСКА ЛАЙКА (чистая)
         async function findLikeButton() {
             const selector = '[data-e2e="play-side-like"] a';
             
@@ -203,14 +204,13 @@
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v8.0 запущен');
+        console.log('🤖 TikTokFree Bot v8.1 запущен');
         
         let running = false;
         let autoStartTimer = null;
         let stats = { completed: 0, earned: 0 };
         let checkInterval = null;
         let retryCount = 0;
-        const MAX_RETRY = 2;
         
         const savedStats = GM_getValue('botStats', null);
         if (savedStats) stats = savedStats;
@@ -288,17 +288,25 @@
             return false;
         }
         
-        function waitForToast(timeout = 15000) {
+        // ОБНОВЛЕННАЯ ФУНКЦИЯ С ПОДДЕРЖКОЙ ВСЕХ ОШИБОК
+        function waitForToast(timeout = SETTINGS.toastTimeout) {
             return new Promise((resolve) => {
                 const checkToasts = () => {
                     const toasts = document.querySelectorAll('.toast');
                     for (const toast of toasts) {
                         const text = toast.innerText;
+                        
+                        // Успех
                         if (text.includes('успешно') || text.includes('зачислено')) {
                             setTimeout(() => dismissToast(toast), 500);
-                            return { success: true, text };
+                            return { success: true, error: false, text };
                         }
-                        if (text.includes('Упс') || text.includes('не выполнили')) {
+                        
+                        // Ошибки (все варианты)
+                        if (text.includes('Упс') || 
+                            text.includes('не выполнили') || 
+                            text.includes('Не удалось проверить') ||
+                            text.includes('попробуйте еще раз')) {
                             setTimeout(() => dismissToast(toast), 500);
                             return { success: false, error: true, text };
                         }
@@ -319,12 +327,15 @@
             });
         }
         
-        async function clickCheck(task, isRetry = false) {
+        async function clickCheck(task, currentAttempt = 1) {
+            console.log(`🔍 Проверка задания (попытка ${currentAttempt}/${SETTINGS.maxRetries})...`);
+            
             const checkBtn = document.querySelector('.btn--check');
             if (!checkBtn) return false;
             checkBtn.click();
+            console.log('🔘 Кнопка "Проверить" нажата');
             
-            const result = await waitForToast(15000);
+            const result = await waitForToast(SETTINGS.toastTimeout);
             
             if (result.success) {
                 console.log(`✅ ВЫПОЛНЕНО! +${task.reward} монет`);
@@ -342,21 +353,25 @@
                 hideData.append('UserPerformTask[submit]', 'hide');
                 fetch('/lightning-action.php?action=tiktokfree_user_perform_task', { method: 'POST', body: hideData, credentials: 'same-origin' });
                 task.wrapper?.remove();
-                retryCount = 0;
+                
                 return true;
             }
             
             if (result.error) {
-                if (isRetry) {
+                console.log(`⚠️ Ошибка: ${result.text}`);
+                
+                if (currentAttempt >= SETTINGS.maxRetries) {
+                    console.log(`❌ После ${SETTINGS.maxRetries} попыток задание НЕ ВЫПОЛНЕНО, скрываю`);
                     hideCurrentTask();
-                    retryCount = 0;
                     return false;
                 } else {
-                    retryCount++;
+                    console.log(`🔄 Пауза ${SETTINGS.retryDelay / 1000} сек, затем повторная проверка (попытка ${currentAttempt + 1}/${SETTINGS.maxRetries})...`);
                     await new Promise(r => setTimeout(r, SETTINGS.retryDelay));
-                    return await clickCheck(task, true);
+                    return await clickCheck(task, currentAttempt + 1);
                 }
             }
+            
+            console.log('❌ Тост не появился');
             return false;
         }
         
@@ -378,7 +393,7 @@
                             }
                             
                             setTimeout(async () => {
-                                const success = await clickCheck(task, false);
+                                const success = await clickCheck(task, 1);
                                 resolve(success);
                             }, SETTINGS.checkDelayAfterReturn);
                         });
@@ -432,7 +447,7 @@
         panel.style.cssText = `position: fixed; bottom: 20px; right: 20px; z-index: 9999; background: linear-gradient(135deg, #667eea, #764ba2); padding: 12px; border-radius: 12px; color: white; font-family: monospace; font-size: 12px; min-width: 220px; box-shadow: 0 2px 10px rgba(0,0,0,0.3);`;
         panel.innerHTML = `
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <b>🤖 TikTokFree Bot v8.0</b>
+                <b>🤖 TikTokFree Bot v8.1</b>
                 <span id="bot-status" style="background: #f44336; padding: 2px 8px; border-radius: 20px;">СТОП</span>
             </div>
             <div>💰 Баланс: <span id="balance">0</span></div>
@@ -459,8 +474,9 @@
             if (running) return;
             running = true;
             updateUI();
-            console.log('\n🚀 БОТ ЗАПУЩЕН v8.0');
-            console.log('📡 Селектор лайка: [data-e2e="play-side-like"] a\n');
+            console.log('\n🚀 БОТ ЗАПУЩЕН v8.1');
+            console.log('📡 Обработка ошибок: Упс!, Не удалось проверить и др.');
+            console.log(`🔄 Максимум ${SETTINGS.maxRetries} попыток проверки, пауза ${SETTINGS.retryDelay / 1000} сек\n`);
             
             let count = 0;
             while (running && count < 100) {
