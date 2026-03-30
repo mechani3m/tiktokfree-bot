@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      7.6.0
-// @description  Финальная версия: вебхуки с ретраями, свайп тостов, автозапуск, статистика
+// @version      7.7.0
+// @description  Упрощенная версия: только GM_setValue для передачи статуса
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -42,7 +42,7 @@
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v7.6 запущен');
+        console.log('🎯 TikTok Bot v7.7 запущен');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -51,7 +51,6 @@
             return new Promise(resolve => setTimeout(resolve, ms));
         }
         
-        // Вебхук с ретраями
         function sendWebhook(action, payload = {}, attempt = 1) {
             const url = SETTINGS.webhookUrl + action;
             
@@ -105,10 +104,9 @@
         }
         
         function sendHideStatus() {
+            console.log('📡 Отправка статуса скрытия через GM_setValue');
             GM_setValue('hide_current_task', 'true');
             GM_setValue('hide_task_reason', `button_${taskType}_not_found`);
-            sessionStorage.setItem('hide_current_task', 'true');
-            localStorage.setItem('hide_current_task', 'true');
         }
         
         async function findFollowButton() {
@@ -211,7 +209,7 @@
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v7.6 запущен');
+        console.log('🤖 TikTokFree Bot v7.7 запущен');
         
         let running = false;
         let autoStartTimer = null;
@@ -277,15 +275,13 @@
             return false;
         }
         
+        // Упрощенная проверка флага (только GM)
         function shouldHideTask() {
-            const gmHide = GM_getValue('hide_current_task', null);
-            const sessionHide = sessionStorage.getItem('hide_current_task');
-            const localHide = localStorage.getItem('hide_current_task');
-            
-            if (gmHide === 'true' || sessionHide === 'true' || localHide === 'true') {
+            const needHide = GM_getValue('hide_current_task', null);
+            if (needHide === 'true') {
+                console.log('⚠️ НАЙДЕН ФЛАГ СКРЫТИЯ В GM_setValue');
                 GM_deleteValue('hide_current_task');
-                sessionStorage.removeItem('hide_current_task');
-                localStorage.removeItem('hide_current_task');
+                GM_deleteValue('hide_task_reason');
                 return true;
             }
             return false;
@@ -425,7 +421,7 @@
         panel.style.cssText = `position: fixed; bottom: 20px; right: 20px; z-index: 9999; background: linear-gradient(135deg, #667eea, #764ba2); padding: 12px; border-radius: 12px; color: white; font-family: monospace; font-size: 12px; min-width: 220px; box-shadow: 0 2px 10px rgba(0,0,0,0.3);`;
         panel.innerHTML = `
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <b>🤖 TikTokFree Bot v7.6</b>
+                <b>🤖 TikTokFree Bot v7.7</b>
                 <span id="bot-status" style="background: #f44336; padding: 2px 8px; border-radius: 20px;">СТОП</span>
             </div>
             <div>💰 Баланс: <span id="balance">0</span></div>
@@ -452,9 +448,8 @@
             if (running) return;
             running = true;
             updateUI();
-            console.log('\n🚀 БОТ ЗАПУЩЕН v7.6');
-            console.log('📡 Вебхуки: до 3 попыток с экспоненциальной задержкой');
-            console.log('🗑️ Тосты автоматически удаляются\n');
+            console.log('\n🚀 БОТ ЗАПУЩЕН v7.7');
+            console.log('📡 Вебхуки: до 3 попыток | Статус: только GM_setValue\n');
             
             let count = 0;
             while (running && count < 100) {
