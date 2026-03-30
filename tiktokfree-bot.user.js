@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      7.7.0
-// @description  Упрощенная версия: только GM_setValue для передачи статуса
+// @version      8.0.0
+// @description  Исправлены селекторы для кнопки лайка (актуальная структура TikTok)
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -37,12 +37,13 @@
         searchAttempts: 10,
         searchInterval: 500,
         webhookTimeout: 10000,
-        webhookMaxRetries: 3
+        webhookMaxRetries: 3,
+        hideFlagTimeout: 5000
     };
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v7.7 запущен');
+        console.log('🎯 TikTok Bot v8.0 запущен');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -136,29 +137,22 @@
             return null;
         }
         
+        // ИСПРАВЛЕННАЯ ФУНКЦИЯ ПОИСКА ЛАЙКА (чистая)
         async function findLikeButton() {
-            const selectors = [
-                '[data-e2e="like-button"]',
-                'button[aria-label*="Нравится"]',
-                'button[aria-label*="Like"]',
-                'span[data-e2e="like-icon"]'
-            ];
+            const selector = '[data-e2e="play-side-like"] a';
             
             for (let attempt = 0; attempt < SETTINGS.searchAttempts; attempt++) {
-                for (const selector of selectors) {
-                    try {
-                        const btn = document.querySelector(selector);
-                        if (btn && btn.offsetParent !== null) return btn;
-                    } catch(e) {}
-                }
+                try {
+                    const element = document.querySelector(selector);
+                    if (element && element.offsetParent !== null) {
+                        console.log(`✅ Кнопка лайка найдена по селектору: ${selector}`);
+                        return element;
+                    }
+                } catch(e) {}
                 
-                const buttons = document.querySelectorAll('button');
-                for (const btn of buttons) {
-                    const text = btn.innerText?.toLowerCase() || '';
-                    if (text.includes('нравится') || text.includes('like')) return btn;
+                if (attempt < SETTINGS.searchAttempts - 1) {
+                    await delay(SETTINGS.searchInterval);
                 }
-                
-                if (attempt < SETTINGS.searchAttempts - 1) await delay(SETTINGS.searchInterval);
             }
             return null;
         }
@@ -209,7 +203,7 @@
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v7.7 запущен');
+        console.log('🤖 TikTokFree Bot v8.0 запущен');
         
         let running = false;
         let autoStartTimer = null;
@@ -275,15 +269,22 @@
             return false;
         }
         
-        // Упрощенная проверка флага (только GM)
-        function shouldHideTask() {
-            const needHide = GM_getValue('hide_current_task', null);
-            if (needHide === 'true') {
-                console.log('⚠️ НАЙДЕН ФЛАГ СКРЫТИЯ В GM_setValue');
-                GM_deleteValue('hide_current_task');
-                GM_deleteValue('hide_task_reason');
-                return true;
+        async function waitForHideFlag(timeout = SETTINGS.hideFlagTimeout) {
+            const start = Date.now();
+            console.log('⏳ Ожидание флага скрытия...');
+            
+            while (Date.now() - start < timeout) {
+                const flag = GM_getValue('hide_current_task', null);
+                if (flag === 'true') {
+                    console.log('✅ Флаг скрытия получен');
+                    GM_deleteValue('hide_current_task');
+                    GM_deleteValue('hide_task_reason');
+                    return true;
+                }
+                await new Promise(r => setTimeout(r, 200));
             }
+            
+            console.log('⏰ Таймаут ожидания флага');
             return false;
         }
         
@@ -366,20 +367,31 @@
                     if (!document.hidden && !resolved) {
                         resolved = true;
                         clearInterval(interval);
+                        console.log('👀 Возврат на сайт!');
                         
-                        if (shouldHideTask()) {
-                            hideCurrentTask();
-                            resolve(false);
-                            return;
-                        }
-                        
-                        setTimeout(async () => {
-                            const success = await clickCheck(task, false);
-                            resolve(success);
-                        }, SETTINGS.checkDelayAfterReturn);
+                        waitForHideFlag(SETTINGS.hideFlagTimeout).then((needHide) => {
+                            if (needHide) {
+                                console.log('✅ Флаг найден! Скрываю задание без проверки');
+                                hideCurrentTask();
+                                resolve(false);
+                                return;
+                            }
+                            
+                            setTimeout(async () => {
+                                const success = await clickCheck(task, false);
+                                resolve(success);
+                            }, SETTINGS.checkDelayAfterReturn);
+                        });
                     }
                 }, 500);
-                setTimeout(() => { if (!resolved) { clearInterval(interval); resolve(false); } }, 60000);
+                
+                setTimeout(() => {
+                    if (!resolved) {
+                        clearInterval(interval);
+                        console.log('⏰ Таймаут ожидания возврата');
+                        resolve(false);
+                    }
+                }, 60000);
             });
         }
         
@@ -408,7 +420,6 @@
         }
         
         async function doTask() {
-            if (shouldHideTask()) return false;
             const task = getTask();
             if (!task || !task.taskType) return false;
             console.log(`\n🎯 ${task.taskType.name} | +${task.reward} монет`);
@@ -421,7 +432,7 @@
         panel.style.cssText = `position: fixed; bottom: 20px; right: 20px; z-index: 9999; background: linear-gradient(135deg, #667eea, #764ba2); padding: 12px; border-radius: 12px; color: white; font-family: monospace; font-size: 12px; min-width: 220px; box-shadow: 0 2px 10px rgba(0,0,0,0.3);`;
         panel.innerHTML = `
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <b>🤖 TikTokFree Bot v7.7</b>
+                <b>🤖 TikTokFree Bot v8.0</b>
                 <span id="bot-status" style="background: #f44336; padding: 2px 8px; border-radius: 20px;">СТОП</span>
             </div>
             <div>💰 Баланс: <span id="balance">0</span></div>
@@ -448,8 +459,8 @@
             if (running) return;
             running = true;
             updateUI();
-            console.log('\n🚀 БОТ ЗАПУЩЕН v7.7');
-            console.log('📡 Вебхуки: до 3 попыток | Статус: только GM_setValue\n');
+            console.log('\n🚀 БОТ ЗАПУЩЕН v8.0');
+            console.log('📡 Селектор лайка: [data-e2e="play-side-like"] a\n');
             
             let count = 0;
             while (running && count < 100) {
