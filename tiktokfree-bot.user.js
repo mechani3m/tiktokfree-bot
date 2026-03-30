@@ -2,7 +2,7 @@
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
 // @version      7.2.0
-// @description  Автоматическое удаление тостов после обработки
+// @description  Автоматическое выполнение заданий + свайп тостов
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -188,16 +188,13 @@
             GM_setValue('botStats', stats);
         }
         
-        // ========== ФУНКЦИЯ УДАЛЕНИЯ ТОСТА (СВАЙП) ==========
+        // Удаление тоста (свайп)
         function dismissToast(toast) {
             if (!toast || !document.body.contains(toast)) return;
-            
-            console.log('🗑️ Удаляю тост:', toast.innerText?.substring(0, 50));
             
             const closeBtn = toast.querySelector('.toast-close, .close, [aria-label="Close"], button');
             if (closeBtn) {
                 closeBtn.click();
-                console.log('✅ Тост закрыт через кнопку');
                 return;
             }
             
@@ -207,32 +204,14 @@
                 const startY = rect.top + rect.height / 2;
                 
                 const touchStart = new TouchEvent('touchstart', {
-                    touches: [new Touch({
-                        identifier: Date.now(),
-                        target: toast,
-                        clientX: startX,
-                        clientY: startY,
-                        radiusX: 2.5,
-                        radiusY: 2.5,
-                        force: 0.5
-                    })]
+                    touches: [new Touch({ identifier: Date.now(), target: toast, clientX: startX, clientY: startY })]
                 });
-                
                 const touchEnd = new TouchEvent('touchend', {
-                    changedTouches: [new Touch({
-                        identifier: Date.now(),
-                        target: toast,
-                        clientX: startX + 200,
-                        clientY: startY,
-                        radiusX: 2.5,
-                        radiusY: 2.5,
-                        force: 0.5
-                    })]
+                    changedTouches: [new Touch({ identifier: Date.now(), target: toast, clientX: startX + 200, clientY: startY })]
                 });
                 
                 toast.dispatchEvent(touchStart);
                 setTimeout(() => toast.dispatchEvent(touchEnd), 50);
-                console.log('👉 Свайп выполнен');
                 
                 setTimeout(() => {
                     if (document.body.contains(toast)) {
@@ -240,14 +219,9 @@
                         toast.style.opacity = '0';
                         toast.style.transition = 'all 0.3s ease';
                         setTimeout(() => toast.remove(), 300);
-                        console.log('🗑️ Тост удален принудительно');
                     }
                 }, 300);
-                
-            } catch(e) {
-                console.log('⚠️ Ошибка свайпа:', e);
-                toast.remove();
-            }
+            } catch(e) {}
         }
         
         function getTaskType() {
@@ -260,13 +234,8 @@
         }
         
         function hideCurrentTask() {
-            console.log('🗑 Скрываю задание...');
             const hideBtn = document.querySelector('.task-item--wrapper .btn--close');
-            if (hideBtn) {
-                hideBtn.click();
-                console.log('✅ Задание скрыто');
-                return true;
-            }
+            if (hideBtn) { hideBtn.click(); return true; }
             return false;
         }
         
@@ -276,7 +245,6 @@
             const localHide = localStorage.getItem('hide_current_task');
             
             if (gmHide === 'true' || sessionHide === 'true' || localHide === 'true') {
-                console.log('⚠️ НАЙДЕН ФЛАГ СКРЫТИЯ!');
                 GM_deleteValue('hide_current_task');
                 sessionStorage.removeItem('hide_current_task');
                 localStorage.removeItem('hide_current_task');
@@ -285,7 +253,6 @@
             return false;
         }
         
-        // ОБНОВЛЕННАЯ ФУНКЦИЯ WAITFORTOAST С УДАЛЕНИЕМ ТОСТОВ
         function waitForToast(timeout = 15000) {
             return new Promise((resolve) => {
                 const checkToasts = () => {
@@ -305,131 +272,87 @@
                 };
                 
                 const existing = checkToasts();
-                if (existing) {
-                    resolve(existing);
-                    return;
-                }
+                if (existing) { resolve(existing); return; }
                 
                 let observer = new MutationObserver(() => {
                     const result = checkToasts();
-                    if (result) {
-                        observer.disconnect();
-                        resolve(result);
-                    }
+                    if (result) { observer.disconnect(); resolve(result); }
                 });
                 observer.observe(document.body, { childList: true, subtree: true });
                 
-                setTimeout(() => {
-                    observer.disconnect();
-                    resolve({ success: false, error: false, text: null });
-                }, timeout);
+                setTimeout(() => { observer.disconnect(); resolve({ success: false, error: false, text: null }); }, timeout);
             });
         }
         
         async function clickCheck(task, isRetry = false) {
-            console.log(`🔍 Проверка (${isRetry ? 'повторная' : 'первая'})...`);
-            
             const checkBtn = document.querySelector('.btn--check');
             if (!checkBtn) return false;
-            
             checkBtn.click();
-            console.log('🔘 "Проверить" нажата');
             
             const result = await waitForToast(15000);
             
             if (result.success) {
-                console.log(`✅ ВЫПОЛНЕНО! +${task.reward} монет`);
                 stats.completed++;
                 stats.earned += task.reward;
                 saveStats();
                 updateUI();
                 
-                try {
-                    const audio = new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3');
-                    audio.volume = 0.3;
-                    audio.play();
-                } catch(e) {}
+                try { new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3').play(); } catch(e) {}
                 
-                GM_notification({
-                    title: '✅ Задание выполнено!',
-                    text: `+${task.reward} монет. Всего: ${stats.completed}`,
-                    timeout: 3000
-                });
+                GM_notification({ title: '✅ Выполнено!', text: `+${task.reward} монет. Всего: ${stats.completed}`, timeout: 3000 });
                 
                 const hideData = new FormData();
                 hideData.append('UserPerformTask[id]', task.id);
                 hideData.append('UserPerformTask[task_execution_id]', task.execId);
                 hideData.append('UserPerformTask[nonce]', task.nonce);
                 hideData.append('UserPerformTask[submit]', 'hide');
-                fetch('/lightning-action.php?action=tiktokfree_user_perform_task', {
-                    method: 'POST',
-                    body: hideData,
-                    credentials: 'same-origin'
-                });
+                fetch('/lightning-action.php?action=tiktokfree_user_perform_task', { method: 'POST', body: hideData, credentials: 'same-origin' });
                 task.wrapper?.remove();
-                
                 retryCount = 0;
                 return true;
             }
             
             if (result.error) {
-                console.log(`⚠️ Ошибка: ${result.text}`);
-                
                 if (isRetry) {
-                    console.log('❌ Повторная ошибка, скрываю задание');
                     hideCurrentTask();
                     retryCount = 0;
                     return false;
                 } else {
-                    console.log(`🔄 Пауза ${SETTINGS.retryDelay / 1000} секунд...`);
                     retryCount++;
                     await new Promise(r => setTimeout(r, SETTINGS.retryDelay));
                     return await clickCheck(task, true);
                 }
             }
-            
-            console.log('❌ Тост не появился');
             return false;
         }
         
         function waitForReturn(task) {
             return new Promise((resolve) => {
                 let resolved = false;
-                
                 const interval = setInterval(() => {
                     if (!document.hidden && !resolved) {
                         resolved = true;
                         clearInterval(interval);
-                        console.log('👀 Возврат на сайт!');
                         
                         if (shouldHideTask()) {
-                            console.log('✅ Флаг найден! Скрываю задание без проверки');
                             hideCurrentTask();
                             resolve(false);
                             return;
                         }
                         
-                        console.log(`⏳ Пауза ${SETTINGS.checkDelayAfterReturn / 1000} секунд...`);
                         setTimeout(async () => {
                             const success = await clickCheck(task, false);
                             resolve(success);
                         }, SETTINGS.checkDelayAfterReturn);
                     }
                 }, 500);
-                
-                setTimeout(() => {
-                    if (!resolved) {
-                        clearInterval(interval);
-                        resolve(false);
-                    }
-                }, 60000);
+                setTimeout(() => { if (!resolved) { clearInterval(interval); resolve(false); } }, 60000);
             });
         }
         
         function getTask() {
             const wrapper = document.querySelector('.task-item--wrapper');
             if (!wrapper) return null;
-            
             const form = wrapper.querySelector('form');
             const id = form?.querySelector('input[name$="[id]"]')?.value;
             const execId = form?.querySelector('input[name$="[task_execution_id]"]')?.value;
@@ -442,7 +365,6 @@
             }
             const executeUrl = wrapper.querySelector('.btn--complete2')?.href || wrapper.querySelector('.btn--complete')?.href;
             const taskType = getTaskType();
-            
             return { wrapper, id, execId, nonce, reward, executeUrl, taskType };
         }
         
@@ -453,36 +375,17 @@
         }
         
         async function doTask() {
-            if (shouldHideTask()) {
-                console.log('⚠️ Был флаг скрытия, пропускаем задание');
-                return false;
-            }
-            
+            if (shouldHideTask()) return false;
             const task = getTask();
             if (!task || !task.taskType) return false;
-            
-            console.log(`\n🎯 ${task.taskType.name} | Награда: +${task.reward} монет`);
+            console.log(`\n🎯 ${task.taskType.name} | +${task.reward} монет`);
             clickExecute(task.executeUrl, task.taskType);
-            
             return await waitForReturn(task);
         }
         
         // UI панель
         const panel = document.createElement('div');
-        panel.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 9999;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            padding: 12px;
-            border-radius: 12px;
-            color: white;
-            font-family: monospace;
-            font-size: 12px;
-            min-width: 220px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        `;
+        panel.style.cssText = `position: fixed; bottom: 20px; right: 20px; z-index: 9999; background: linear-gradient(135deg, #667eea, #764ba2); padding: 12px; border-radius: 12px; color: white; font-family: monospace; font-size: 12px; min-width: 220px; box-shadow: 0 2px 10px rgba(0,0,0,0.3);`;
         panel.innerHTML = `
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                 <b>🤖 TikTokFree Bot</b>
@@ -512,23 +415,18 @@
             if (running) return;
             running = true;
             updateUI();
-            
-            console.log('\n🚀 БОТ ЗАПУЩЕН v7.2');
-            console.log('📌 Тосты автоматически удаляются после обработки\n');
+            console.log('\n🚀 БОТ ЗАПУЩЕН v7.2 | Тосты удаляются автоматически\n');
             
             let count = 0;
             while (running && count < 100) {
                 const success = await doTask();
                 if (success) count++;
                 await new Promise(r => setTimeout(r, 2000));
-                
                 if (!document.querySelector('.task-item--wrapper')) {
-                    console.log('📭 Задания кончились, обновляю...');
                     setTimeout(() => location.reload(), 2000);
                     break;
                 }
             }
-            
             running = false;
             updateUI();
             console.log(`\n🏁 ОСТАНОВЛЕН | Выполнено: ${stats.completed} | Заработано: ${stats.earned.toFixed(2)}`);
@@ -552,16 +450,10 @@
         document.getElementById('start-btn').onclick = startBot;
         document.getElementById('stop-btn').onclick = stopBot;
         document.getElementById('reset-stats').onclick = resetStats;
-        
         window.botStats = () => console.log(`✅ ${stats.completed} | 💎 ${stats.earned.toFixed(2)}`);
         
         updateUI();
-        
-        autoStartTimer = setTimeout(() => {
-            if (!running) startBot();
-        }, SETTINGS.autoStartDelay);
-        
+        autoStartTimer = setTimeout(() => { if (!running) startBot(); }, SETTINGS.autoStartDelay);
         console.log('✅ Бот готов! botStats() - статистика');
-        console.log('📱 Тосты будут автоматически удаляться после обработки');
     }
 })();
