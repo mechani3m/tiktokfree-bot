@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      8.2.0
-// @description  Финальная версия: кнопка подтверждения для MacroDroid, обработка всех ошибок, 3 попытки
+// @version      8.3.0
+// @description  Кнопка подтверждения по центру экрана
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -29,24 +29,23 @@
     // ========== НАСТРОЙКИ ==========
     const SETTINGS = {
         webhookUrl: GM_getValue('webhookUrl', 'https://trigger.macrodroid.com/e4e9515c-9214-454b-83c2-f81eb88e356d'),
-        waitAfterFound: 60000,          // 60 секунд максимум (ждем кнопку)
+        waitAfterFound: 60000,
         waitAfterNotFound: 3000,
         autoStartDelay: 5000,
         checkDelayAfterReturn: 2000,
         retryDelay: 5000,
-        maxRetries: 3,                  // 3 попытки проверки
+        maxRetries: 3,
         searchAttempts: 10,
         searchInterval: 500,
         webhookTimeout: 10000,
         webhookMaxRetries: 3,
         hideFlagTimeout: 5000,
-        toastTimeout: 20000,
-        buttonCheckInterval: 500        // Проверка кнопки каждые 500мс
+        toastTimeout: 20000
     };
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v8.2 запущен (с кнопкой подтверждения)');
+        console.log('🎯 TikTok Bot v8.3 запущен (кнопка по центру)');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -108,7 +107,7 @@
             }
         }
         
-        // ДОБАВЛЯЕМ КНОПКУ "ГОТОВО" ДЛЯ MACRODROID
+        // КНОПКА ПО ЦЕНТРУ ЭКРАНА
         function addCompletionButton() {
             const oldBtn = document.getElementById('tikbot-complete-btn');
             if (oldBtn) oldBtn.remove();
@@ -118,32 +117,34 @@
             btn.innerHTML = `
                 <div style="
                     position: fixed;
-                    bottom: 80px;
-                    right: 20px;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
                     z-index: 99999;
                     background: linear-gradient(135deg, #4caf50, #2e7d32);
                     color: white;
-                    padding: 14px 24px;
-                    border-radius: 50px;
-                    font-size: 16px;
+                    padding: 20px 40px;
+                    border-radius: 60px;
+                    font-size: 24px;
                     font-weight: bold;
                     font-family: sans-serif;
                     cursor: pointer;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
                     display: flex;
                     align-items: center;
-                    gap: 8px;
+                    gap: 12px;
                     animation: pulse 1s infinite;
-                    border: 2px solid white;
+                    border: 3px solid white;
+                    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
                 ">
-                    <span style="font-size: 20px;">✅</span>
+                    <span style="font-size: 32px;">✅</span>
                     <span>ГОТОВО! Я ВЫПОЛНИЛ</span>
                 </div>
                 <style>
                     @keyframes pulse {
-                        0% { transform: scale(1); }
-                        50% { transform: scale(1.05); }
-                        100% { transform: scale(1); }
+                        0% { transform: translate(-50%, -50%) scale(1); }
+                        50% { transform: translate(-50%, -50%) scale(1.05); }
+                        100% { transform: translate(-50%, -50%) scale(1); }
                     }
                 </style>
             `;
@@ -154,18 +155,15 @@
                 console.log('🔘 Кнопка "ГОТОВО" нажата!');
                 btn.remove();
                 
-                // Сохраняем флаг что действие выполнено
                 localStorage.setItem('tikbot_action_completed', 'true');
                 localStorage.setItem('tikbot_completed_time', Date.now());
                 localStorage.setItem('tikbot_task_type', taskType);
                 
-                // Отправляем вебхук подтверждения
                 sendWebhook('/action_completed', {
                     taskType: taskType,
                     action: 'completed_by_macrodroid'
                 });
                 
-                // Закрываем вкладку через 0.5 секунды
                 setTimeout(() => {
                     console.log('🔚 Закрываю вкладку по нажатию кнопки');
                     window.close();
@@ -173,9 +171,8 @@
             };
             
             document.body.appendChild(btn);
-            console.log('✅ Кнопка "ГОТОВО" добавлена! MacroDroid должен нажать её после выполнения действия');
+            console.log('✅ Кнопка "ГОТОВО" добавлена по центру экрана!');
             
-            // Убираем кнопку через 55 секунд (на случай если не нажали)
             setTimeout(() => {
                 if (!buttonClicked) {
                     const btnElement = document.getElementById('tikbot-complete-btn');
@@ -247,14 +244,13 @@
                 console.log(`✅ Кнопка ${taskType} найдена!`);
                 sendWebhook(`/${taskType}`, { buttonFound: true });
                 
-                // Добавляем кнопку "ГОТОВО"
                 addCompletionButton();
                 
                 const indicator = document.createElement('div');
-                indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: #0a0; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 12px;`;
+                indicator.style.cssText = `position: fixed; bottom: 20px; left: 20px; z-index: 9999; background: rgba(0,0,0,0.7); color: #0f0; padding: 8px 16px; border-radius: 8px; font-size: 12px;`;
                 indicator.innerHTML = `✅ Кнопка найдена! Нажмите "ГОТОВО" после выполнения`;
                 document.body.appendChild(indicator);
-                setTimeout(() => indicator.remove(), 3000);
+                setTimeout(() => indicator.remove(), 5000);
                 
             } else {
                 console.log(`❌ Кнопка ${taskType} НЕ НАЙДЕНА`);
@@ -264,7 +260,7 @@
                 GM_setValue('hide_task_reason', `button_${taskType}_not_found`);
                 
                 const indicator = document.createElement('div');
-                indicator.style.cssText = `position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: #a00; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 12px;`;
+                indicator.style.cssText = `position: fixed; bottom: 20px; left: 20px; z-index: 9999; background: rgba(0,0,0,0.7); color: #f00; padding: 8px 16px; border-radius: 8px; font-size: 12px;`;
                 indicator.innerHTML = `❌ Кнопка НЕ найдена! Закрываю через ${SETTINGS.waitAfterNotFound/1000} сек`;
                 document.body.appendChild(indicator);
                 
@@ -283,7 +279,7 @@
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v8.2 запущен');
+        console.log('🤖 TikTokFree Bot v8.3 запущен');
         
         let running = false;
         let autoStartTimer = null;
@@ -519,7 +515,7 @@
         panel.style.cssText = `position: fixed; bottom: 20px; right: 20px; z-index: 9999; background: linear-gradient(135deg, #667eea, #764ba2); padding: 12px; border-radius: 12px; color: white; font-family: monospace; font-size: 12px; min-width: 220px; box-shadow: 0 2px 10px rgba(0,0,0,0.3);`;
         panel.innerHTML = `
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <b>🤖 TikTokFree Bot v8.2</b>
+                <b>🤖 TikTokFree Bot v8.3</b>
                 <span id="bot-status" style="background: #f44336; padding: 2px 8px; border-radius: 20px;">СТОП</span>
             </div>
             <div>💰 Баланс: <span id="balance">0</span></div>
@@ -546,12 +542,8 @@
             if (running) return;
             running = true;
             updateUI();
-            console.log('\n🚀 БОТ ЗАПУЩЕН v8.2');
-            console.log('📌 Новая логика:');
-            console.log('   • TikTok: появляется кнопка "ГОТОВО! Я ВЫПОЛНИЛ"');
-            console.log('   • MacroDroid нажимает кнопку после выполнения действия');
-            console.log('   • Вкладка закрывается сразу после нажатия');
-            console.log(`   • Максимум ${SETTINGS.maxRetries} попыток проверки при ошибках\n`);
+            console.log('\n🚀 БОТ ЗАПУЩЕН v8.3');
+            console.log('📌 Кнопка подтверждения по центру экрана TikTok\n');
             
             let count = 0;
             while (running && count < 100) {
@@ -591,7 +583,6 @@
         updateUI();
         autoStartTimer = setTimeout(() => { if (!running) startBot(); }, SETTINGS.autoStartDelay);
         console.log('✅ Бот готов! botStats() - статистика');
-        console.log('📌 В TikTok появится кнопка "ГОТОВО! Я ВЫПОЛНИЛ"');
-        console.log('📌 Настрой MacroDroid нажать эту кнопку после подписки/лайка');
+        console.log('📌 В TikTok появится большая кнопка по центру экрана');
     }
 })();
