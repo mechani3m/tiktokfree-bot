@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      8.9.0
-// @description  Добавлены повторные попытки при "нет ответа"
+// @version      8.10.0
+// @description  Панель статуса с вебхуками в TikTok
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -49,7 +49,7 @@
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v8.9 запущен');
+        console.log('🎯 TikTok Bot v8.10 запущен');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -81,32 +81,60 @@
             topPanel.innerHTML = `🤖 TikTok Bot Active`;
             document.body.appendChild(topPanel);
             
-            const bottomPanel = document.createElement('div');
-            bottomPanel.id = 'tikbot-status-panel';
-            bottomPanel.style.cssText = `
+            const statusPanel = document.createElement('div');
+            statusPanel.id = 'tikbot-status-panel';
+            statusPanel.style.cssText = `
                 position: fixed;
                 bottom: 20px;
                 left: 20px;
                 z-index: 99999;
-                background: rgba(0,0,0,0.8);
+                background: rgba(0,0,0,0.85);
                 color: #fff;
-                padding: 8px 16px;
-                border-radius: 20px;
+                padding: 10px 16px;
+                border-radius: 12px;
                 font-family: monospace;
                 font-size: 12px;
-                backdrop-filter: blur(5px);
+                backdrop-filter: blur(8px);
                 border-left: 3px solid #ffaa00;
                 pointer-events: none;
+                min-width: 200px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             `;
-            bottomPanel.innerHTML = `🔍 Поиск кнопки...`;
-            document.body.appendChild(bottomPanel);
+            statusPanel.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span>📡</span>
+                    <span>Статус: поиск кнопки...</span>
+                </div>
+                <div style="font-size: 10px; color: #aaa; margin-top: 4px;" id="webhook-status"></div>
+            `;
+            document.body.appendChild(statusPanel);
         }
         
-        function updateStatus(text, isError = false) {
+        function updateStatus(text, isError = false, webhookText = null) {
             const panel = document.getElementById('tikbot-status-panel');
             if (panel) {
-                panel.innerHTML = text;
+                const mainSpan = panel.querySelector('span:last-child');
+                if (mainSpan) mainSpan.innerHTML = text;
                 panel.style.borderLeftColor = isError ? '#f44336' : '#4caf50';
+                
+                const webhookDiv = document.getElementById('webhook-status');
+                if (webhookDiv && webhookText) {
+                    webhookDiv.innerHTML = webhookText;
+                }
+            }
+        }
+        
+        function updateWebhookStatus(action, status) {
+            const webhookDiv = document.getElementById('webhook-status');
+            if (webhookDiv) {
+                const time = new Date().toLocaleTimeString();
+                const statusIcon = status === 'ok' ? '✓' : (status === 'sending' ? '⏳' : '❌');
+                const statusColor = status === 'ok' ? '#4caf50' : (status === 'sending' ? '#ffaa00' : '#f44336');
+                webhookDiv.innerHTML = `<span style="color: ${statusColor}">[${time}] ${action}: ${statusIcon} ${status}</span><br>` + webhookDiv.innerHTML;
+                const lines = webhookDiv.innerHTML.split('<br>');
+                if (lines.length > 5) {
+                    webhookDiv.innerHTML = lines.slice(0, 5).join('<br>');
+                }
             }
         }
         
@@ -119,6 +147,8 @@
                 ...payload
             };
             
+            updateWebhookStatus(action, 'sending');
+            
             GM_xmlhttpRequest({
                 method: 'POST',
                 url: url,
@@ -128,17 +158,21 @@
                 onload: function(res) {
                     if (res.status >= 200 && res.status < 300) {
                         console.log(`✅ [${action}] отправлен`);
+                        updateWebhookStatus(action, 'ok');
                     } else {
                         console.log(`⚠️ [${action}] ошибка ${res.status}`);
+                        updateWebhookStatus(action, `error ${res.status}`);
                         retry();
                     }
                 },
                 onerror: function() {
                     console.log(`❌ [${action}] сеть`);
+                    updateWebhookStatus(action, 'network error');
                     retry();
                 },
                 ontimeout: function() {
                     console.log(`⏳ [${action}] таймаут`);
+                    updateWebhookStatus(action, 'timeout');
                     retry();
                 }
             });
@@ -146,9 +180,12 @@
             function retry() {
                 if (attempt < SETTINGS.webhookMaxRetries) {
                     const delayMs = 2000 * attempt;
+                    updateWebhookStatus(action, `retry ${attempt+1}/${SETTINGS.webhookMaxRetries}`);
                     setTimeout(() => {
                         sendWebhook(action, payload, attempt + 1);
                     }, delayMs);
+                } else {
+                    updateWebhookStatus(action, 'failed');
                 }
             }
         }
@@ -206,7 +243,7 @@
             };
             
             document.body.appendChild(btn);
-            updateStatus('✅ Кнопка найдена! Жду нажатия ГОТОВО');
+            updateStatus('✅ Кнопка найдена! Жду нажатия ГОТОВО', false);
             
             setTimeout(() => {
                 if (!buttonClicked) {
@@ -269,12 +306,13 @@
             
             if (button) {
                 console.log(`✅ ${taskType} кнопка найдена`);
+                updateStatus('🔍 Кнопка найдена, отправляю вебхук...', false);
                 sendWebhook(`/${taskType}`, { buttonFound: true });
                 addCompletionButton();
             } else {
                 console.log(`❌ ${taskType} кнопка НЕ найдена`);
+                updateStatus('❌ Кнопка НЕ найдена!', true);
                 sendWebhook(`/${taskType}_not_found`, { buttonFound: false });
-                updateStatus('❌ Кнопка НЕ найдена! Закрываю...', true);
                 GM_setValue('hide_current_task', 'true');
                 setTimeout(() => window.close(), SETTINGS.waitAfterNotFound);
             }
@@ -290,7 +328,7 @@
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v8.9 запущен');
+        console.log('🤖 TikTokFree Bot v8.10 запущен');
         
         let running = false;
         let autoStartTimer = null;
@@ -431,7 +469,6 @@
                 }
             }
             
-            // НЕТ ОТВЕТА - тоже повторяем
             console.log(`❌ нет ответа (${currentAttempt}/${SETTINGS.maxRetries})`);
             if (currentAttempt >= SETTINGS.maxRetries) {
                 console.log(`❌ после ${SETTINGS.maxRetries} попыток без ответа — скрываю`);
@@ -576,7 +613,7 @@
             if (running) return;
             running = true;
             updateUI();
-            console.log('\n🚀 БОТ ЗАПУЩЕН v8.9');
+            console.log('\n🚀 БОТ ЗАПУЩЕН v8.10');
             console.log(`📌 Максимум ${SETTINGS.maxRetries} попыток проверки`);
             let count = 0;
             while (running && count < 100) {
