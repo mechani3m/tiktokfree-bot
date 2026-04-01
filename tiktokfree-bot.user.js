@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      8.3.0
-// @description  Кнопка подтверждения по центру экрана
+// @version      8.4.0
+// @description  Панель справа, галочка автостарта
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -40,12 +40,17 @@
         webhookTimeout: 10000,
         webhookMaxRetries: 3,
         hideFlagTimeout: 5000,
-        toastTimeout: 20000
+        toastTimeout: 30000
+    };
+    
+    // Конфиг для UI
+    const CONFIG = {
+        autoStart: GM_getValue('autoStart', false)
     };
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v8.3 запущен (кнопка по центру)');
+        console.log('🎯 TikTok Bot v8.4 запущен');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -57,7 +62,6 @@
         
         function sendWebhook(action, payload = {}, attempt = 1) {
             const url = SETTINGS.webhookUrl + action;
-            
             const data = {
                 timestamp: Date.now(),
                 url: location.href,
@@ -73,7 +77,6 @@
                 timeout: SETTINGS.webhookTimeout,
                 headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify(data),
-                
                 onload: function(res) {
                     if (res.status >= 200 && res.status < 300) {
                         console.log(`✅ Вебхук ${action} успешно отправлен, статус: ${res.status}`);
@@ -82,12 +85,10 @@
                         retry();
                     }
                 },
-                
                 onerror: function(e) {
                     console.log(`❌ Ошибка отправки вебхука ${action}:`, e);
                     retry();
                 },
-                
                 ontimeout: function() {
                     console.log(`⏳ Таймаут отправки вебхука ${action}`);
                     retry();
@@ -107,7 +108,6 @@
             }
         }
         
-        // КНОПКА ПО ЦЕНТРУ ЭКРАНА
         function addCompletionButton() {
             const oldBtn = document.getElementById('tikbot-complete-btn');
             if (oldBtn) oldBtn.remove();
@@ -154,30 +154,18 @@
                 buttonClicked = true;
                 console.log('🔘 Кнопка "ГОТОВО" нажата!');
                 btn.remove();
-                
                 localStorage.setItem('tikbot_action_completed', 'true');
-                localStorage.setItem('tikbot_completed_time', Date.now());
-                localStorage.setItem('tikbot_task_type', taskType);
-                
-                sendWebhook('/action_completed', {
-                    taskType: taskType,
-                    action: 'completed_by_macrodroid'
-                });
-                
-                setTimeout(() => {
-                    console.log('🔚 Закрываю вкладку по нажатию кнопки');
-                    window.close();
-                }, 500);
+                sendWebhook('/action_completed', { action: 'completed_by_macrodroid' });
+                setTimeout(() => window.close(), 500);
             };
             
             document.body.appendChild(btn);
-            console.log('✅ Кнопка "ГОТОВО" добавлена по центру экрана!');
+            console.log('✅ Кнопка "ГОТОВО" добавлена по центру!');
             
             setTimeout(() => {
                 if (!buttonClicked) {
                     const btnElement = document.getElementById('tikbot-complete-btn');
                     if (btnElement) {
-                        console.log('⏰ Таймаут: кнопка не нажата, удаляю и закрываю');
                         btnElement.remove();
                         window.close();
                     }
@@ -192,7 +180,6 @@
                 'button[aria-label*="Follow"]',
                 'button[class*="follow"]'
             ];
-            
             for (let attempt = 0; attempt < SETTINGS.searchAttempts; attempt++) {
                 for (const selector of selectors) {
                     try {
@@ -200,13 +187,11 @@
                         if (btn && btn.offsetParent !== null) return btn;
                     } catch(e) {}
                 }
-                
                 const buttons = document.querySelectorAll('button');
                 for (const btn of buttons) {
                     const text = btn.innerText?.toLowerCase() || '';
                     if (text.includes('подписаться') || text.includes('follow')) return btn;
                 }
-                
                 if (attempt < SETTINGS.searchAttempts - 1) await delay(SETTINGS.searchInterval);
             }
             return null;
@@ -214,25 +199,18 @@
         
         async function findLikeButton() {
             const selector = '[data-e2e="play-side-like"] a';
-            
             for (let attempt = 0; attempt < SETTINGS.searchAttempts; attempt++) {
                 try {
                     const element = document.querySelector(selector);
-                    if (element && element.offsetParent !== null) {
-                        return element;
-                    }
+                    if (element && element.offsetParent !== null) return element;
                 } catch(e) {}
-                
-                if (attempt < SETTINGS.searchAttempts - 1) {
-                    await delay(SETTINGS.searchInterval);
-                }
+                if (attempt < SETTINGS.searchAttempts - 1) await delay(SETTINGS.searchInterval);
             }
             return null;
         }
         
         async function run() {
             await delay(1500);
-            
             let button = null;
             if (taskType === 'follow') {
                 button = await findFollowButton();
@@ -243,27 +221,11 @@
             if (button) {
                 console.log(`✅ Кнопка ${taskType} найдена!`);
                 sendWebhook(`/${taskType}`, { buttonFound: true });
-                
                 addCompletionButton();
-                
-                const indicator = document.createElement('div');
-                indicator.style.cssText = `position: fixed; bottom: 20px; left: 20px; z-index: 9999; background: rgba(0,0,0,0.7); color: #0f0; padding: 8px 16px; border-radius: 8px; font-size: 12px;`;
-                indicator.innerHTML = `✅ Кнопка найдена! Нажмите "ГОТОВО" после выполнения`;
-                document.body.appendChild(indicator);
-                setTimeout(() => indicator.remove(), 5000);
-                
             } else {
                 console.log(`❌ Кнопка ${taskType} НЕ НАЙДЕНА`);
                 sendWebhook(`/${taskType}_not_found`, { buttonFound: false });
-                
                 GM_setValue('hide_current_task', 'true');
-                GM_setValue('hide_task_reason', `button_${taskType}_not_found`);
-                
-                const indicator = document.createElement('div');
-                indicator.style.cssText = `position: fixed; bottom: 20px; left: 20px; z-index: 9999; background: rgba(0,0,0,0.7); color: #f00; padding: 8px 16px; border-radius: 8px; font-size: 12px;`;
-                indicator.innerHTML = `❌ Кнопка НЕ найдена! Закрываю через ${SETTINGS.waitAfterNotFound/1000} сек`;
-                document.body.appendChild(indicator);
-                
                 setTimeout(() => window.close(), SETTINGS.waitAfterNotFound);
             }
         }
@@ -273,13 +235,12 @@
         } else {
             run();
         }
-        
         return;
     }
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v8.3 запущен');
+        console.log('🤖 TikTokFree Bot v8.4 запущен');
         
         let running = false;
         let autoStartTimer = null;
@@ -295,28 +256,20 @@
         
         function dismissToast(toast) {
             if (!toast || !document.body.contains(toast)) return;
-            
             const closeBtn = toast.querySelector('.toast-close, .close, [aria-label="Close"], button');
-            if (closeBtn) {
-                closeBtn.click();
-                return;
-            }
-            
+            if (closeBtn) { closeBtn.click(); return; }
             try {
                 const rect = toast.getBoundingClientRect();
                 const startX = rect.left + rect.width / 2;
                 const startY = rect.top + rect.height / 2;
-                
                 const touchStart = new TouchEvent('touchstart', {
                     touches: [new Touch({ identifier: Date.now(), target: toast, clientX: startX, clientY: startY })]
                 });
                 const touchEnd = new TouchEvent('touchend', {
                     changedTouches: [new Touch({ identifier: Date.now(), target: toast, clientX: startX + 200, clientY: startY })]
                 });
-                
                 toast.dispatchEvent(touchStart);
                 setTimeout(() => toast.dispatchEvent(touchEnd), 50);
-                
                 setTimeout(() => {
                     if (document.body.contains(toast)) {
                         toast.style.transform = 'translateX(100%)';
@@ -345,14 +298,10 @@
         
         async function waitForHideFlag(timeout = SETTINGS.hideFlagTimeout) {
             const start = Date.now();
-            console.log('⏳ Ожидание флага скрытия...');
-            
             while (Date.now() - start < timeout) {
                 const flag = GM_getValue('hide_current_task', null);
                 if (flag === 'true') {
-                    console.log('✅ Флаг скрытия получен');
                     GM_deleteValue('hide_current_task');
-                    GM_deleteValue('hide_task_reason');
                     return true;
                 }
                 await new Promise(r => setTimeout(r, 200));
@@ -366,54 +315,41 @@
                     const toasts = document.querySelectorAll('.toast');
                     for (const toast of toasts) {
                         const text = toast.innerText;
-                        
                         if (text.includes('успешно') || text.includes('зачислено')) {
                             setTimeout(() => dismissToast(toast), 500);
                             return { success: true, error: false, text };
                         }
-                        
-                        if (text.includes('Упс') || 
-                            text.includes('не выполнили') || 
-                            text.includes('Не удалось проверить') ||
-                            text.includes('попробуйте еще раз')) {
+                        if (text.includes('Упс') || text.includes('не выполнили') || 
+                            text.includes('Не удалось проверить') || text.includes('попробуйте еще раз')) {
                             setTimeout(() => dismissToast(toast), 500);
                             return { success: false, error: true, text };
                         }
                     }
                     return null;
                 };
-                
                 const existing = checkToasts();
                 if (existing) { resolve(existing); return; }
-                
                 let observer = new MutationObserver(() => {
                     const result = checkToasts();
                     if (result) { observer.disconnect(); resolve(result); }
                 });
                 observer.observe(document.body, { childList: true, subtree: true });
-                
                 setTimeout(() => { observer.disconnect(); resolve({ success: false, error: false, text: null }); }, timeout);
             });
         }
         
         async function clickCheck(task, currentAttempt = 1) {
-            console.log(`🔍 Проверка (попытка ${currentAttempt}/${SETTINGS.maxRetries})...`);
-            
             const checkBtn = document.querySelector('.btn--check');
             if (!checkBtn) return false;
             checkBtn.click();
-            
             const result = await waitForToast(SETTINGS.toastTimeout);
             
             if (result.success) {
-                console.log(`✅ ВЫПОЛНЕНО! +${task.reward} монет`);
                 stats.completed++;
                 stats.earned += task.reward;
                 saveStats();
                 updateUI();
-                
                 GM_notification({ title: '✅ Выполнено!', text: `+${task.reward} монет. Всего: ${stats.completed}`, timeout: 3000 });
-                
                 const hideData = new FormData();
                 hideData.append('UserPerformTask[id]', task.id);
                 hideData.append('UserPerformTask[task_execution_id]', task.execId);
@@ -421,25 +357,18 @@
                 hideData.append('UserPerformTask[submit]', 'hide');
                 fetch('/lightning-action.php?action=tiktokfree_user_perform_task', { method: 'POST', body: hideData, credentials: 'same-origin' });
                 task.wrapper?.remove();
-                
                 return true;
             }
             
             if (result.error) {
-                console.log(`⚠️ Ошибка: ${result.text}`);
-                
                 if (currentAttempt >= SETTINGS.maxRetries) {
-                    console.log(`❌ После ${SETTINGS.maxRetries} попыток задание НЕ ВЫПОЛНЕНО, скрываю`);
                     hideCurrentTask();
                     return false;
                 } else {
-                    console.log(`🔄 Пауза ${SETTINGS.retryDelay / 1000} сек, повторная проверка...`);
                     await new Promise(r => setTimeout(r, SETTINGS.retryDelay));
                     return await clickCheck(task, currentAttempt + 1);
                 }
             }
-            
-            console.log('❌ Тост не появился');
             return false;
         }
         
@@ -450,16 +379,12 @@
                     if (!document.hidden && !resolved) {
                         resolved = true;
                         clearInterval(interval);
-                        console.log('👀 Возврат на сайт!');
-                        
                         waitForHideFlag(SETTINGS.hideFlagTimeout).then((needHide) => {
                             if (needHide) {
-                                console.log('✅ Флаг найден! Скрываю задание без проверки');
                                 hideCurrentTask();
                                 resolve(false);
                                 return;
                             }
-                            
                             setTimeout(async () => {
                                 const success = await clickCheck(task, 1);
                                 resolve(success);
@@ -467,11 +392,9 @@
                         });
                     }
                 }, 500);
-                
                 setTimeout(() => {
                     if (!resolved) {
                         clearInterval(interval);
-                        console.log('⏰ Таймаут ожидания возврата');
                         resolve(false);
                     }
                 }, 60000);
@@ -510,23 +433,60 @@
             return await waitForReturn(task);
         }
         
-        // UI панель
-        const panel = document.createElement('div');
-        panel.style.cssText = `position: fixed; bottom: 20px; right: 20px; z-index: 9999; background: linear-gradient(135deg, #667eea, #764ba2); padding: 12px; border-radius: 12px; color: white; font-family: monospace; font-size: 12px; min-width: 220px; box-shadow: 0 2px 10px rgba(0,0,0,0.3);`;
-        panel.innerHTML = `
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <b>🤖 TikTokFree Bot v8.3</b>
-                <span id="bot-status" style="background: #f44336; padding: 2px 8px; border-radius: 20px;">СТОП</span>
-            </div>
-            <div>💰 Баланс: <span id="balance">0</span></div>
-            <div>✅ Выполнено: <span id="completed">0</span></div>
-            <div>💎 Заработано: <span id="earned">0</span></div>
-            <hr style="margin: 6px 0; opacity: 0.3;">
-            <button id="start-btn" style="width: 100%; padding: 6px; background: #4caf50; border: none; border-radius: 6px; cursor: pointer; color: white; margin-bottom: 4px;">▶ СТАРТ</button>
-            <button id="stop-btn" style="width: 100%; padding: 6px; background: #f44336; border: none; border-radius: 6px; cursor: pointer; color: white; margin-bottom: 4px;">⏹ СТОП</button>
-            <button id="reset-stats" style="width: 100%; padding: 4px; background: #ff9800; border: none; border-radius: 6px; cursor: pointer; font-size: 10px; color: white;">🔄 Сбросить статистику</button>
-        `;
-        document.body.appendChild(panel);
+        // ОБНОВЛЕННАЯ ПАНЕЛЬ
+        function createUIPanel() {
+            const panel = document.createElement('div');
+            panel.style.cssText = `
+                position: fixed;
+                bottom: 80px;
+                right: 20px;
+                z-index: 9999;
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                padding: 12px;
+                border-radius: 12px;
+                color: white;
+                font-family: monospace;
+                font-size: 12px;
+                min-width: 220px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            `;
+            panel.innerHTML = `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <b>🤖 TikTokFree Bot v8.4</b>
+                    <span id="bot-status" style="background: #f44336; padding: 2px 8px; border-radius: 20px;">СТОП</span>
+                </div>
+                <div>💰 Баланс: <span id="balance">0</span></div>
+                <div>✅ Выполнено: <span id="completed">0</span></div>
+                <div>💎 Заработано: <span id="earned">0</span></div>
+                <hr style="margin: 6px 0; opacity: 0.3;">
+                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                    <button id="start-btn" style="flex: 1; padding: 6px; background: #4caf50; border: none; border-radius: 6px; cursor: pointer; color: white;">▶ СТАРТ</button>
+                    <button id="stop-btn" style="flex: 1; padding: 6px; background: #f44336; border: none; border-radius: 6px; cursor: pointer; color: white;">⏹ СТОП</button>
+                    <button id="config-btn" style="flex: 0.3; padding: 6px; background: #ff9800; border: none; border-radius: 6px; cursor: pointer; color: white;">⚙</button>
+                </div>
+                <div id="settings-panel" style="display: none; background: rgba(0,0,0,0.5); border-radius: 8px; padding: 8px; margin-top: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="auto-start-checkbox" ${CONFIG.autoStart ? 'checked' : ''}>
+                        <span>🚀 Автостарт при загрузке</span>
+                    </label>
+                </div>
+                <button id="reset-stats" style="width: 100%; padding: 4px; background: #ff9800; border: none; border-radius: 6px; cursor: pointer; font-size: 10px; color: white; margin-top: 8px;">🔄 Сбросить статистику</button>
+            `;
+            document.body.appendChild(panel);
+            
+            document.getElementById('start-btn').onclick = () => startBot();
+            document.getElementById('stop-btn').onclick = () => stopBot();
+            document.getElementById('reset-stats').onclick = () => resetStats();
+            document.getElementById('config-btn').onclick = () => {
+                const settings = document.getElementById('settings-panel');
+                settings.style.display = settings.style.display === 'none' ? 'block' : 'none';
+            };
+            document.getElementById('auto-start-checkbox').onchange = (e) => {
+                CONFIG.autoStart = e.target.checked;
+                GM_setValue('autoStart', CONFIG.autoStart);
+                console.log(`⚙️ Автостарт: ${CONFIG.autoStart ? 'ВКЛ' : 'ВЫКЛ'}`);
+            };
+        }
         
         function updateUI() {
             const balance = document.querySelector('.user-balance')?.innerText || '0';
@@ -542,9 +502,7 @@
             if (running) return;
             running = true;
             updateUI();
-            console.log('\n🚀 БОТ ЗАПУЩЕН v8.3');
-            console.log('📌 Кнопка подтверждения по центру экрана TikTok\n');
-            
+            console.log('\n🚀 БОТ ЗАПУЩЕН v8.4');
             let count = 0;
             while (running && count < 100) {
                 const success = await doTask();
@@ -575,14 +533,18 @@
             console.log('📊 Статистика сброшена');
         }
         
-        document.getElementById('start-btn').onclick = startBot;
-        document.getElementById('stop-btn').onclick = stopBot;
-        document.getElementById('reset-stats').onclick = resetStats;
-        window.botStats = () => console.log(`✅ ${stats.completed} | 💎 ${stats.earned.toFixed(2)}`);
-        
+        createUIPanel();
         updateUI();
-        autoStartTimer = setTimeout(() => { if (!running) startBot(); }, SETTINGS.autoStartDelay);
+        
+        if (CONFIG.autoStart) {
+            console.log(`⏳ Автостарт через ${SETTINGS.autoStartDelay/1000} сек...`);
+            autoStartTimer = setTimeout(() => {
+                if (!running) startBot();
+            }, SETTINGS.autoStartDelay);
+        }
+        
+        window.botStats = () => console.log(`✅ ${stats.completed} | 💎 ${stats.earned.toFixed(2)}`);
         console.log('✅ Бот готов! botStats() - статистика');
-        console.log('📌 В TikTok появится большая кнопка по центру экрана');
+        if (!CONFIG.autoStart) console.log('💡 Автостарт выключен. Нажмите СТАРТ вручную');
     }
 })();
