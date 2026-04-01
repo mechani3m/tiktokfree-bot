@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      8.4.0
-// @description  Панель справа, галочка автостарта
+// @version      8.5.0
+// @description  Минималистичная панель, подробные логи
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -40,17 +40,16 @@
         webhookTimeout: 10000,
         webhookMaxRetries: 3,
         hideFlagTimeout: 5000,
-        toastTimeout: 30000
+        toastTimeout: 20000
     };
     
-    // Конфиг для UI
     const CONFIG = {
         autoStart: GM_getValue('autoStart', false)
     };
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v8.4 запущен');
+        console.log('🎯 TikTok Bot v8.5');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -69,7 +68,7 @@
                 ...payload
             };
             
-            console.log(`📡 Отправка вебхука: ${action} (попытка ${attempt}/${SETTINGS.webhookMaxRetries})`);
+            console.log(`📡 [${action}] отправка (${attempt}/${SETTINGS.webhookMaxRetries})`);
             
             GM_xmlhttpRequest({
                 method: 'POST',
@@ -79,18 +78,18 @@
                 data: JSON.stringify(data),
                 onload: function(res) {
                     if (res.status >= 200 && res.status < 300) {
-                        console.log(`✅ Вебхук ${action} успешно отправлен, статус: ${res.status}`);
+                        console.log(`✅ [${action}] отправлен (${res.status})`);
                     } else {
-                        console.log(`⚠️ Вебхук ${action} вернул ошибку, статус: ${res.status}`);
+                        console.log(`⚠️ [${action}] ошибка ${res.status}`);
                         retry();
                     }
                 },
                 onerror: function(e) {
-                    console.log(`❌ Ошибка отправки вебхука ${action}:`, e);
+                    console.log(`❌ [${action}] сеть`);
                     retry();
                 },
                 ontimeout: function() {
-                    console.log(`⏳ Таймаут отправки вебхука ${action}`);
+                    console.log(`⏳ [${action}] таймаут`);
                     retry();
                 }
             });
@@ -98,12 +97,12 @@
             function retry() {
                 if (attempt < SETTINGS.webhookMaxRetries) {
                     const delayMs = 2000 * attempt;
-                    console.log(`🔁 Повторная отправка через ${delayMs/1000} сек (попытка ${attempt + 1})`);
+                    console.log(`🔁 повтор через ${delayMs/1000}с`);
                     setTimeout(() => {
                         sendWebhook(action, payload, attempt + 1);
                     }, delayMs);
                 } else {
-                    console.log(`❌ Вебхук ${action} не отправлен после ${SETTINGS.webhookMaxRetries} попыток`);
+                    console.log(`❌ [${action}] не отправлен`);
                 }
             }
         }
@@ -121,52 +120,44 @@
                     left: 50%;
                     transform: translate(-50%, -50%);
                     z-index: 99999;
-                    background: linear-gradient(135deg, #4caf50, #2e7d32);
+                    background: #2e7d32;
                     color: white;
-                    padding: 20px 40px;
-                    border-radius: 60px;
-                    font-size: 24px;
+                    padding: 16px 32px;
+                    border-radius: 48px;
+                    font-size: 20px;
                     font-weight: bold;
-                    font-family: sans-serif;
+                    font-family: monospace;
                     cursor: pointer;
-                    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
                     display: flex;
                     align-items: center;
-                    gap: 12px;
-                    animation: pulse 1s infinite;
-                    border: 3px solid white;
-                    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+                    gap: 10px;
+                    border: 2px solid white;
                 ">
-                    <span style="font-size: 32px;">✅</span>
-                    <span>ГОТОВО! Я ВЫПОЛНИЛ</span>
+                    <span>✅</span>
+                    <span>ГОТОВО</span>
                 </div>
-                <style>
-                    @keyframes pulse {
-                        0% { transform: translate(-50%, -50%) scale(1); }
-                        50% { transform: translate(-50%, -50%) scale(1.05); }
-                        100% { transform: translate(-50%, -50%) scale(1); }
-                    }
-                </style>
             `;
             
             btn.onclick = () => {
                 if (buttonClicked) return;
                 buttonClicked = true;
-                console.log('🔘 Кнопка "ГОТОВО" нажата!');
+                console.log('🔘 ГОТОВО нажата');
                 btn.remove();
                 localStorage.setItem('tikbot_action_completed', 'true');
-                sendWebhook('/action_completed', { action: 'completed_by_macrodroid' });
+                sendWebhook('/action_completed', { action: 'completed' });
                 setTimeout(() => window.close(), 500);
             };
             
             document.body.appendChild(btn);
-            console.log('✅ Кнопка "ГОТОВО" добавлена по центру!');
+            console.log('✅ кнопка ГОТОВО добавлена');
             
             setTimeout(() => {
                 if (!buttonClicked) {
                     const btnElement = document.getElementById('tikbot-complete-btn');
                     if (btnElement) {
                         btnElement.remove();
+                        console.log('⏰ таймаут, закрываю');
                         window.close();
                     }
                 }
@@ -219,11 +210,11 @@
             }
             
             if (button) {
-                console.log(`✅ Кнопка ${taskType} найдена!`);
+                console.log(`✅ ${taskType} кнопка найдена`);
                 sendWebhook(`/${taskType}`, { buttonFound: true });
                 addCompletionButton();
             } else {
-                console.log(`❌ Кнопка ${taskType} НЕ НАЙДЕНА`);
+                console.log(`❌ ${taskType} кнопка НЕ найдена`);
                 sendWebhook(`/${taskType}_not_found`, { buttonFound: false });
                 GM_setValue('hide_current_task', 'true');
                 setTimeout(() => window.close(), SETTINGS.waitAfterNotFound);
@@ -240,7 +231,7 @@
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v8.4 запущен');
+        console.log('🤖 TikTokFree Bot v8.5');
         
         let running = false;
         let autoStartTimer = null;
@@ -285,14 +276,18 @@
             const titleEl = document.querySelector('.list-item--title.task-item--title');
             if (!titleEl) return null;
             const titleText = titleEl.innerText;
-            if (titleText.includes('Подписаться')) return { type: 'follow', name: 'Подписка' };
-            if (titleText.includes('лайк') || titleText.includes('Like')) return { type: 'like', name: 'Лайк' };
+            if (titleText.includes('Подписаться')) return { type: 'follow', name: '📌 Подписка' };
+            if (titleText.includes('лайк') || titleText.includes('Like')) return { type: 'like', name: '❤️ Лайк' };
             return null;
         }
         
         function hideCurrentTask() {
             const hideBtn = document.querySelector('.task-item--wrapper .btn--close');
-            if (hideBtn) { hideBtn.click(); return true; }
+            if (hideBtn) { 
+                hideBtn.click(); 
+                console.log('🗑 задание скрыто');
+                return true; 
+            }
             return false;
         }
         
@@ -302,6 +297,7 @@
                 const flag = GM_getValue('hide_current_task', null);
                 if (flag === 'true') {
                     GM_deleteValue('hide_current_task');
+                    console.log('🚩 флаг скрытия получен');
                     return true;
                 }
                 await new Promise(r => setTimeout(r, 200));
@@ -339,17 +335,20 @@
         }
         
         async function clickCheck(task, currentAttempt = 1) {
+            console.log(`🔍 проверка ${currentAttempt}/${SETTINGS.maxRetries}`);
             const checkBtn = document.querySelector('.btn--check');
             if (!checkBtn) return false;
             checkBtn.click();
+            
             const result = await waitForToast(SETTINGS.toastTimeout);
             
             if (result.success) {
+                console.log(`✅ ВЫПОЛНЕНО! +${task.reward} монет`);
                 stats.completed++;
                 stats.earned += task.reward;
                 saveStats();
                 updateUI();
-                GM_notification({ title: '✅ Выполнено!', text: `+${task.reward} монет. Всего: ${stats.completed}`, timeout: 3000 });
+                GM_notification({ title: '✅ Выполнено!', text: `+${task.reward} монет`, timeout: 2000 });
                 const hideData = new FormData();
                 hideData.append('UserPerformTask[id]', task.id);
                 hideData.append('UserPerformTask[task_execution_id]', task.execId);
@@ -361,14 +360,18 @@
             }
             
             if (result.error) {
+                console.log(`⚠️ ошибка: ${result.text}`);
                 if (currentAttempt >= SETTINGS.maxRetries) {
+                    console.log(`❌ после ${SETTINGS.maxRetries} попыток — скрываю`);
                     hideCurrentTask();
                     return false;
                 } else {
+                    console.log(`🔄 повтор через ${SETTINGS.retryDelay/1000}с`);
                     await new Promise(r => setTimeout(r, SETTINGS.retryDelay));
                     return await clickCheck(task, currentAttempt + 1);
                 }
             }
+            console.log(`❌ нет ответа`);
             return false;
         }
         
@@ -379,6 +382,7 @@
                     if (!document.hidden && !resolved) {
                         resolved = true;
                         clearInterval(interval);
+                        console.log('👀 возврат на сайт');
                         waitForHideFlag(SETTINGS.hideFlagTimeout).then((needHide) => {
                             if (needHide) {
                                 hideCurrentTask();
@@ -395,6 +399,7 @@
                 setTimeout(() => {
                     if (!resolved) {
                         clearInterval(interval);
+                        console.log('⏰ таймаут возврата');
                         resolve(false);
                     }
                 }, 60000);
@@ -422,6 +427,7 @@
         function clickExecute(url, taskType) {
             GM_setValue('current_task_type', taskType?.type || 'follow');
             const separator = url.includes('?') ? '&' : '?';
+            console.log(`🚀 открываю TikTok`);
             window.open(`${url}${separator}task_type=${taskType?.type || 'follow'}`, '_blank');
         }
         
@@ -433,44 +439,42 @@
             return await waitForReturn(task);
         }
         
-        // ОБНОВЛЕННАЯ ПАНЕЛЬ
+        // МИНИМАЛИСТИЧНАЯ ПАНЕЛЬ
         function createUIPanel() {
             const panel = document.createElement('div');
             panel.style.cssText = `
                 position: fixed;
-                bottom: 80px;
-                right: 20px;
+                bottom: 100px;
+                right: 12px;
                 z-index: 9999;
-                background: linear-gradient(135deg, #667eea, #764ba2);
-                padding: 12px;
-                border-radius: 12px;
-                color: white;
+                background: #1e1e2e;
+                padding: 10px 14px;
+                border-radius: 8px;
+                color: #cdd6f4;
                 font-family: monospace;
-                font-size: 12px;
-                min-width: 220px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                font-size: 11px;
+                min-width: 180px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                border: 1px solid #313244;
             `;
             panel.innerHTML = `
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                    <b>🤖 TikTokFree Bot v8.4</b>
-                    <span id="bot-status" style="background: #f44336; padding: 2px 8px; border-radius: 20px;">СТОП</span>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <b>🤖 TF Bot</b>
+                    <span id="bot-status" style="background: #f38ba8; padding: 2px 8px; border-radius: 12px;">СТОП</span>
                 </div>
-                <div>💰 Баланс: <span id="balance">0</span></div>
-                <div>✅ Выполнено: <span id="completed">0</span></div>
-                <div>💎 Заработано: <span id="earned">0</span></div>
-                <hr style="margin: 6px 0; opacity: 0.3;">
-                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-                    <button id="start-btn" style="flex: 1; padding: 6px; background: #4caf50; border: none; border-radius: 6px; cursor: pointer; color: white;">▶ СТАРТ</button>
-                    <button id="stop-btn" style="flex: 1; padding: 6px; background: #f44336; border: none; border-radius: 6px; cursor: pointer; color: white;">⏹ СТОП</button>
-                    <button id="config-btn" style="flex: 0.3; padding: 6px; background: #ff9800; border: none; border-radius: 6px; cursor: pointer; color: white;">⚙</button>
+                <div>💰 <span id="balance">0</span> | ✅ <span id="completed">0</span> | 💎 <span id="earned">0</span></div>
+                <div style="margin: 6px 0; display: flex; gap: 6px;">
+                    <button id="start-btn" style="flex:1; background:#a6e3a1; border:none; border-radius:4px; padding:4px; cursor:pointer; color:#111;">▶</button>
+                    <button id="stop-btn" style="flex:1; background:#f38ba8; border:none; border-radius:4px; padding:4px; cursor:pointer; color:#111;">⏹</button>
+                    <button id="config-btn" style="background:#cba6f7; border:none; border-radius:4px; padding:4px 8px; cursor:pointer;">⚙</button>
                 </div>
-                <div id="settings-panel" style="display: none; background: rgba(0,0,0,0.5); border-radius: 8px; padding: 8px; margin-top: 8px;">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <div id="settings-panel" style="display: none; margin-top: 6px; padding-top: 6px; border-top: 1px solid #313244;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                         <input type="checkbox" id="auto-start-checkbox" ${CONFIG.autoStart ? 'checked' : ''}>
-                        <span>🚀 Автостарт при загрузке</span>
+                        <span>автостарт</span>
                     </label>
                 </div>
-                <button id="reset-stats" style="width: 100%; padding: 4px; background: #ff9800; border: none; border-radius: 6px; cursor: pointer; font-size: 10px; color: white; margin-top: 8px;">🔄 Сбросить статистику</button>
+                <button id="reset-stats" style="width:100%; background:#313244; border:none; border-radius:4px; padding:3px; margin-top:6px; cursor:pointer; color:#cdd6f4; font-size:10px;">сброс</button>
             `;
             document.body.appendChild(panel);
             
@@ -484,7 +488,7 @@
             document.getElementById('auto-start-checkbox').onchange = (e) => {
                 CONFIG.autoStart = e.target.checked;
                 GM_setValue('autoStart', CONFIG.autoStart);
-                console.log(`⚙️ Автостарт: ${CONFIG.autoStart ? 'ВКЛ' : 'ВЫКЛ'}`);
+                console.log(`⚙️ автостарт: ${CONFIG.autoStart ? 'вкл' : 'выкл'}`);
             };
         }
         
@@ -494,35 +498,37 @@
             document.getElementById('completed').innerText = stats.completed;
             document.getElementById('earned').innerText = stats.earned.toFixed(2);
             const statusEl = document.getElementById('bot-status');
-            statusEl.innerText = running ? 'РАБОТАЕТ' : 'СТОП';
-            statusEl.style.background = running ? '#4caf50' : '#f44336';
+            statusEl.innerText = running ? 'РАБ' : 'СТОП';
+            statusEl.style.background = running ? '#a6e3a1' : '#f38ba8';
+            statusEl.style.color = running ? '#111' : '#111';
         }
         
         async function startBot() {
             if (running) return;
             running = true;
             updateUI();
-            console.log('\n🚀 БОТ ЗАПУЩЕН v8.4');
+            console.log('\n🚀 СТАРТ');
             let count = 0;
             while (running && count < 100) {
                 const success = await doTask();
                 if (success) count++;
                 await new Promise(r => setTimeout(r, 2000));
                 if (!document.querySelector('.task-item--wrapper')) {
+                    console.log('📭 задания кончились, обновляю');
                     setTimeout(() => location.reload(), 2000);
                     break;
                 }
             }
             running = false;
             updateUI();
-            console.log(`\n🏁 ОСТАНОВЛЕН | Выполнено: ${stats.completed} | Заработано: ${stats.earned.toFixed(2)}`);
+            console.log(`\n🏁 СТОП | ✅ ${stats.completed} | 💎 ${stats.earned.toFixed(2)}`);
         }
         
         function stopBot() {
             running = false;
             if (checkInterval) clearInterval(checkInterval);
             if (autoStartTimer) clearTimeout(autoStartTimer);
-            console.log('🛑 Остановлен');
+            console.log('🛑 стоп');
             updateUI();
         }
         
@@ -530,21 +536,21 @@
             stats = { completed: 0, earned: 0 };
             saveStats();
             updateUI();
-            console.log('📊 Статистика сброшена');
+            console.log('📊 статистика сброшена');
         }
         
         createUIPanel();
         updateUI();
         
         if (CONFIG.autoStart) {
-            console.log(`⏳ Автостарт через ${SETTINGS.autoStartDelay/1000} сек...`);
+            console.log(`⏳ автостарт через ${SETTINGS.autoStartDelay/1000}с`);
             autoStartTimer = setTimeout(() => {
                 if (!running) startBot();
             }, SETTINGS.autoStartDelay);
         }
         
         window.botStats = () => console.log(`✅ ${stats.completed} | 💎 ${stats.earned.toFixed(2)}`);
-        console.log('✅ Бот готов! botStats() - статистика');
-        if (!CONFIG.autoStart) console.log('💡 Автостарт выключен. Нажмите СТАРТ вручную');
+        console.log('✅ готов | botStats()');
+        if (!CONFIG.autoStart) console.log('💡 нажми СТАРТ');
     }
 })();
