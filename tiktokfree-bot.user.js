@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      8.5.0
-// @description  Минималистичная панель, подробные логи
+// @version      8.6.0
+// @description  Красивая кнопка в TikTok + красивая панель на сайте
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -49,7 +49,7 @@
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v8.5');
+        console.log('🎯 TikTok Bot v8.6 запущен');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -68,7 +68,7 @@
                 ...payload
             };
             
-            console.log(`📡 [${action}] отправка (${attempt}/${SETTINGS.webhookMaxRetries})`);
+            console.log(`📡 [${action}] (${attempt}/${SETTINGS.webhookMaxRetries})`);
             
             GM_xmlhttpRequest({
                 method: 'POST',
@@ -78,13 +78,13 @@
                 data: JSON.stringify(data),
                 onload: function(res) {
                     if (res.status >= 200 && res.status < 300) {
-                        console.log(`✅ [${action}] отправлен (${res.status})`);
+                        console.log(`✅ [${action}] отправлен`);
                     } else {
                         console.log(`⚠️ [${action}] ошибка ${res.status}`);
                         retry();
                     }
                 },
-                onerror: function(e) {
+                onerror: function() {
                     console.log(`❌ [${action}] сеть`);
                     retry();
                 },
@@ -107,6 +107,7 @@
             }
         }
         
+        // КРАСИВАЯ КНОПКА ДЛЯ TIKTOK
         function addCompletionButton() {
             const oldBtn = document.getElementById('tikbot-complete-btn');
             if (oldBtn) oldBtn.remove();
@@ -120,23 +121,32 @@
                     left: 50%;
                     transform: translate(-50%, -50%);
                     z-index: 99999;
-                    background: #2e7d32;
+                    background: linear-gradient(135deg, #4caf50, #2e7d32);
                     color: white;
-                    padding: 16px 32px;
-                    border-radius: 48px;
-                    font-size: 20px;
+                    padding: 20px 40px;
+                    border-radius: 60px;
+                    font-size: 24px;
                     font-weight: bold;
-                    font-family: monospace;
+                    font-family: sans-serif;
                     cursor: pointer;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
                     display: flex;
                     align-items: center;
-                    gap: 10px;
-                    border: 2px solid white;
+                    gap: 12px;
+                    animation: pulse 1s infinite;
+                    border: 3px solid white;
+                    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
                 ">
-                    <span>✅</span>
-                    <span>ГОТОВО</span>
+                    <span style="font-size: 32px;">✅</span>
+                    <span>ГОТОВО! Я ВЫПОЛНИЛ</span>
                 </div>
+                <style>
+                    @keyframes pulse {
+                        0% { transform: translate(-50%, -50%) scale(1); }
+                        50% { transform: translate(-50%, -50%) scale(1.05); }
+                        100% { transform: translate(-50%, -50%) scale(1); }
+                    }
+                </style>
             `;
             
             btn.onclick = () => {
@@ -231,7 +241,7 @@
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v8.5');
+        console.log('🤖 TikTokFree Bot v8.6 запущен');
         
         let running = false;
         let autoStartTimer = null;
@@ -439,42 +449,44 @@
             return await waitForReturn(task);
         }
         
-        // МИНИМАЛИСТИЧНАЯ ПАНЕЛЬ
+        // КРАСИВАЯ ПАНЕЛЬ НА САЙТЕ
         function createUIPanel() {
             const panel = document.createElement('div');
             panel.style.cssText = `
                 position: fixed;
                 bottom: 100px;
-                right: 12px;
+                right: 20px;
                 z-index: 9999;
-                background: #1e1e2e;
-                padding: 10px 14px;
-                border-radius: 8px;
-                color: #cdd6f4;
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                padding: 12px;
+                border-radius: 12px;
+                color: white;
                 font-family: monospace;
-                font-size: 11px;
-                min-width: 180px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                border: 1px solid #313244;
+                font-size: 12px;
+                min-width: 200px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             `;
             panel.innerHTML = `
-                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                    <b>🤖 TF Bot</b>
-                    <span id="bot-status" style="background: #f38ba8; padding: 2px 8px; border-radius: 12px;">СТОП</span>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <b>🤖 TikTokFree Bot</b>
+                    <span id="bot-status" style="background: #f44336; padding: 2px 8px; border-radius: 20px;">СТОП</span>
                 </div>
-                <div>💰 <span id="balance">0</span> | ✅ <span id="completed">0</span> | 💎 <span id="earned">0</span></div>
-                <div style="margin: 6px 0; display: flex; gap: 6px;">
-                    <button id="start-btn" style="flex:1; background:#a6e3a1; border:none; border-radius:4px; padding:4px; cursor:pointer; color:#111;">▶</button>
-                    <button id="stop-btn" style="flex:1; background:#f38ba8; border:none; border-radius:4px; padding:4px; cursor:pointer; color:#111;">⏹</button>
-                    <button id="config-btn" style="background:#cba6f7; border:none; border-radius:4px; padding:4px 8px; cursor:pointer;">⚙</button>
+                <div>💰 Баланс: <span id="balance">0</span></div>
+                <div>✅ Выполнено: <span id="completed">0</span></div>
+                <div>💎 Заработано: <span id="earned">0</span></div>
+                <hr style="margin: 6px 0; opacity: 0.3;">
+                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                    <button id="start-btn" style="flex: 1; padding: 6px; background: #4caf50; border: none; border-radius: 6px; cursor: pointer; color: white;">▶ СТАРТ</button>
+                    <button id="stop-btn" style="flex: 1; padding: 6px; background: #f44336; border: none; border-radius: 6px; cursor: pointer; color: white;">⏹ СТОП</button>
+                    <button id="config-btn" style="flex: 0.3; padding: 6px; background: #ff9800; border: none; border-radius: 6px; cursor: pointer; color: white;">⚙</button>
                 </div>
-                <div id="settings-panel" style="display: none; margin-top: 6px; padding-top: 6px; border-top: 1px solid #313244;">
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <div id="settings-panel" style="display: none; background: rgba(0,0,0,0.5); border-radius: 8px; padding: 8px; margin-top: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                         <input type="checkbox" id="auto-start-checkbox" ${CONFIG.autoStart ? 'checked' : ''}>
-                        <span>автостарт</span>
+                        <span>🚀 Автостарт при загрузке</span>
                     </label>
                 </div>
-                <button id="reset-stats" style="width:100%; background:#313244; border:none; border-radius:4px; padding:3px; margin-top:6px; cursor:pointer; color:#cdd6f4; font-size:10px;">сброс</button>
+                <button id="reset-stats" style="width: 100%; padding: 4px; background: #ff9800; border: none; border-radius: 6px; cursor: pointer; font-size: 10px; color: white;">🔄 Сбросить статистику</button>
             `;
             document.body.appendChild(panel);
             
@@ -498,16 +510,15 @@
             document.getElementById('completed').innerText = stats.completed;
             document.getElementById('earned').innerText = stats.earned.toFixed(2);
             const statusEl = document.getElementById('bot-status');
-            statusEl.innerText = running ? 'РАБ' : 'СТОП';
-            statusEl.style.background = running ? '#a6e3a1' : '#f38ba8';
-            statusEl.style.color = running ? '#111' : '#111';
+            statusEl.innerText = running ? 'РАБОТАЕТ' : 'СТОП';
+            statusEl.style.background = running ? '#4caf50' : '#f44336';
         }
         
         async function startBot() {
             if (running) return;
             running = true;
             updateUI();
-            console.log('\n🚀 СТАРТ');
+            console.log('\n🚀 БОТ ЗАПУЩЕН v8.6');
             let count = 0;
             while (running && count < 100) {
                 const success = await doTask();
@@ -521,14 +532,14 @@
             }
             running = false;
             updateUI();
-            console.log(`\n🏁 СТОП | ✅ ${stats.completed} | 💎 ${stats.earned.toFixed(2)}`);
+            console.log(`\n🏁 ОСТАНОВЛЕН | ✅ ${stats.completed} | 💎 ${stats.earned.toFixed(2)}`);
         }
         
         function stopBot() {
             running = false;
             if (checkInterval) clearInterval(checkInterval);
             if (autoStartTimer) clearTimeout(autoStartTimer);
-            console.log('🛑 стоп');
+            console.log('🛑 остановлен');
             updateUI();
         }
         
@@ -550,7 +561,7 @@
         }
         
         window.botStats = () => console.log(`✅ ${stats.completed} | 💎 ${stats.earned.toFixed(2)}`);
-        console.log('✅ готов | botStats()');
+        console.log('✅ бот готов | botStats()');
         if (!CONFIG.autoStart) console.log('💡 нажми СТАРТ');
     }
 })();
