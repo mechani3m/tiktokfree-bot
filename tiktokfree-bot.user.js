@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      8.8.0
-// @description  Красивая кнопка + панели статуса в TikTok (слева снизу + справа сверху)
+// @version      8.9.0
+// @description  Добавлены повторные попытки при "нет ответа"
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -49,7 +49,7 @@
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v8.8 запущен');
+        console.log('🎯 TikTok Bot v8.9 запущен');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -59,9 +59,7 @@
             return new Promise(resolve => setTimeout(resolve, ms));
         }
         
-        // СОЗДАЕМ ПАНЕЛИ
         function createPanels() {
-            // Панель справа сверху
             const topPanel = document.createElement('div');
             topPanel.id = 'tikbot-top-panel';
             topPanel.style.cssText = `
@@ -83,7 +81,6 @@
             topPanel.innerHTML = `🤖 TikTok Bot Active`;
             document.body.appendChild(topPanel);
             
-            // Панель слева снизу (статус)
             const bottomPanel = document.createElement('div');
             bottomPanel.id = 'tikbot-status-panel';
             bottomPanel.style.cssText = `
@@ -122,8 +119,6 @@
                 ...payload
             };
             
-            console.log(`📡 [${action}] (${attempt}/${SETTINGS.webhookMaxRetries})`);
-            
             GM_xmlhttpRequest({
                 method: 'POST',
                 url: url,
@@ -151,17 +146,13 @@
             function retry() {
                 if (attempt < SETTINGS.webhookMaxRetries) {
                     const delayMs = 2000 * attempt;
-                    console.log(`🔁 повтор через ${delayMs/1000}с`);
                     setTimeout(() => {
                         sendWebhook(action, payload, attempt + 1);
                     }, delayMs);
-                } else {
-                    console.log(`❌ [${action}] не отправлен`);
                 }
             }
         }
         
-        // КРАСИВАЯ КНОПКА ДЛЯ TIKTOK
         function addCompletionButton() {
             const oldBtn = document.getElementById('tikbot-complete-btn');
             if (oldBtn) oldBtn.remove();
@@ -215,7 +206,6 @@
             };
             
             document.body.appendChild(btn);
-            console.log('✅ кнопка ГОТОВО добавлена');
             updateStatus('✅ Кнопка найдена! Жду нажатия ГОТОВО');
             
             setTimeout(() => {
@@ -224,7 +214,6 @@
                     if (btnElement) {
                         btnElement.remove();
                         updateStatus('⏰ Таймаут, закрываю', true);
-                        console.log('⏰ таймаут, закрываю');
                         window.close();
                     }
                 }
@@ -301,7 +290,7 @@
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v8.8 запущен');
+        console.log('🤖 TikTokFree Bot v8.9 запущен');
         
         let running = false;
         let autoStartTimer = null;
@@ -441,8 +430,18 @@
                     return await clickCheck(task, currentAttempt + 1);
                 }
             }
-            console.log(`❌ нет ответа`);
-            return false;
+            
+            // НЕТ ОТВЕТА - тоже повторяем
+            console.log(`❌ нет ответа (${currentAttempt}/${SETTINGS.maxRetries})`);
+            if (currentAttempt >= SETTINGS.maxRetries) {
+                console.log(`❌ после ${SETTINGS.maxRetries} попыток без ответа — скрываю`);
+                hideCurrentTask();
+                return false;
+            } else {
+                console.log(`🔄 повтор через ${SETTINGS.retryDelay/1000}с`);
+                await new Promise(r => setTimeout(r, SETTINGS.retryDelay));
+                return await clickCheck(task, currentAttempt + 1);
+            }
         }
         
         function waitForReturn(task) {
@@ -509,7 +508,6 @@
             return await waitForReturn(task);
         }
         
-        // КРАСИВАЯ ПАНЕЛЬ НА САЙТЕ
         function createUIPanel() {
             const panel = document.createElement('div');
             panel.style.cssText = `
@@ -578,7 +576,8 @@
             if (running) return;
             running = true;
             updateUI();
-            console.log('\n🚀 БОТ ЗАПУЩЕН v8.8');
+            console.log('\n🚀 БОТ ЗАПУЩЕН v8.9');
+            console.log(`📌 Максимум ${SETTINGS.maxRetries} попыток проверки`);
             let count = 0;
             while (running && count < 100) {
                 const success = await doTask();
