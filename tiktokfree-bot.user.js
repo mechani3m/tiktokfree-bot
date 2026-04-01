@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      8.6.0
-// @description  Красивая кнопка в TikTok + красивая панель на сайте
+// @version      8.8.0
+// @description  Красивая кнопка + панели статуса в TikTok (слева снизу + справа сверху)
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -49,7 +49,7 @@
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v8.6 запущен');
+        console.log('🎯 TikTok Bot v8.8 запущен');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -57,6 +57,60 @@
         
         function delay(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        
+        // СОЗДАЕМ ПАНЕЛИ
+        function createPanels() {
+            // Панель справа сверху
+            const topPanel = document.createElement('div');
+            topPanel.id = 'tikbot-top-panel';
+            topPanel.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 99999;
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                color: white;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-family: monospace;
+                font-size: 12px;
+                font-weight: bold;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                backdrop-filter: blur(5px);
+                pointer-events: none;
+            `;
+            topPanel.innerHTML = `🤖 TikTok Bot Active`;
+            document.body.appendChild(topPanel);
+            
+            // Панель слева снизу (статус)
+            const bottomPanel = document.createElement('div');
+            bottomPanel.id = 'tikbot-status-panel';
+            bottomPanel.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                z-index: 99999;
+                background: rgba(0,0,0,0.8);
+                color: #fff;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-family: monospace;
+                font-size: 12px;
+                backdrop-filter: blur(5px);
+                border-left: 3px solid #ffaa00;
+                pointer-events: none;
+            `;
+            bottomPanel.innerHTML = `🔍 Поиск кнопки...`;
+            document.body.appendChild(bottomPanel);
+        }
+        
+        function updateStatus(text, isError = false) {
+            const panel = document.getElementById('tikbot-status-panel');
+            if (panel) {
+                panel.innerHTML = text;
+                panel.style.borderLeftColor = isError ? '#f44336' : '#4caf50';
+            }
         }
         
         function sendWebhook(action, payload = {}, attempt = 1) {
@@ -154,6 +208,7 @@
                 buttonClicked = true;
                 console.log('🔘 ГОТОВО нажата');
                 btn.remove();
+                updateStatus('✅ Завершено!', false);
                 localStorage.setItem('tikbot_action_completed', 'true');
                 sendWebhook('/action_completed', { action: 'completed' });
                 setTimeout(() => window.close(), 500);
@@ -161,12 +216,14 @@
             
             document.body.appendChild(btn);
             console.log('✅ кнопка ГОТОВО добавлена');
+            updateStatus('✅ Кнопка найдена! Жду нажатия ГОТОВО');
             
             setTimeout(() => {
                 if (!buttonClicked) {
                     const btnElement = document.getElementById('tikbot-complete-btn');
                     if (btnElement) {
                         btnElement.remove();
+                        updateStatus('⏰ Таймаут, закрываю', true);
                         console.log('⏰ таймаут, закрываю');
                         window.close();
                     }
@@ -211,7 +268,9 @@
         }
         
         async function run() {
+            createPanels();
             await delay(1500);
+            
             let button = null;
             if (taskType === 'follow') {
                 button = await findFollowButton();
@@ -226,6 +285,7 @@
             } else {
                 console.log(`❌ ${taskType} кнопка НЕ найдена`);
                 sendWebhook(`/${taskType}_not_found`, { buttonFound: false });
+                updateStatus('❌ Кнопка НЕ найдена! Закрываю...', true);
                 GM_setValue('hide_current_task', 'true');
                 setTimeout(() => window.close(), SETTINGS.waitAfterNotFound);
             }
@@ -241,7 +301,7 @@
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v8.6 запущен');
+        console.log('🤖 TikTokFree Bot v8.8 запущен');
         
         let running = false;
         let autoStartTimer = null;
@@ -518,7 +578,7 @@
             if (running) return;
             running = true;
             updateUI();
-            console.log('\n🚀 БОТ ЗАПУЩЕН v8.6');
+            console.log('\n🚀 БОТ ЗАПУЩЕН v8.8');
             let count = 0;
             while (running && count < 100) {
                 const success = await doTask();
