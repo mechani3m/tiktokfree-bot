@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      8.12.0
-// @description  Панель с галочкой автостарта, отображение логина TikTok (исправлено)
+// @version      8.14.0
+// @description  Вертикальная панель, кнопка Автостарт (без галочки)
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
 // @match        https://tiktop-free.com/tasks
@@ -50,7 +50,7 @@
     
     // ========== TIKTOK ==========
     if (isTikTok) {
-        console.log('🎯 TikTok Bot v8.12 запущен');
+        console.log('🎯 TikTok Bot v8.14 запущен');
         
         const urlParams = new URLSearchParams(location.search);
         const taskType = urlParams.get('task_type') || GM_getValue('current_task_type', 'follow');
@@ -234,13 +234,12 @@
     
     // ========== TIKTOPFREE ==========
     if (isTikTopFree) {
-        console.log('🤖 TikTokFree Bot v8.12 запущен');
+        console.log('🤖 TikTokFree Bot v8.14 запущен');
         
         let running = false;
         let autoStartTimer = null;
         let stats = { completed: 0, earned: 0 };
         let checkInterval = null;
-        let resetWaitTimer = null;
         
         const savedStats = GM_getValue('botStats', null);
         if (savedStats) stats = savedStats;
@@ -257,26 +256,19 @@
         }
         
         function getAccountLogin() {
-            const el = document.querySelector('.executor--username.text-overflow-ellipsis.text-gray');
+            let el = document.querySelector('.executor--username.text-overflow-ellipsis.text-gray');
+            if (el) return el.innerText.trim();
+            el = document.querySelector('.executor--username');
+            if (el) return el.innerText.trim();
+            el = document.querySelector('.executor--username a');
             if (el) return el.innerText.trim();
             return null;
         }
         
         function updateAccountLogin() {
             const login = getAccountLogin();
-            if (!login) return;
-            const panel = document.querySelector('.tikbot-panel');
-            if (!panel) return;
-            let loginLine = panel.querySelector('.tikbot-login');
-            if (!loginLine) {
-                loginLine = document.createElement('div');
-                loginLine.className = 'tikbot-login';
-                loginLine.style.cssText = 'font-size: 10px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px;';
-                const rightCol = panel.querySelector('.tikbot-right-col');
-                if (rightCol) rightCol.prepend(loginLine);
-                else panel.appendChild(loginLine);
-            }
-            loginLine.innerHTML = `🎭 ${login}`;
+            const loginPlace = document.getElementById('account-login-place');
+            if (loginPlace) loginPlace.innerHTML = login ? `🎭 ${login}` : '🎭 ---';
         }
         
         function checkAndHandleResetAccount() {
@@ -393,6 +385,7 @@
                         resolved = true;
                         clearInterval(interval);
                         console.log('👀 возврат на сайт');
+                        updateAccountLogin();
                         waitForHideFlag(SETTINGS.hideFlagTimeout).then(needHide => {
                             if (needHide) { hideCurrentTask(); resolve(false); return; }
                             setTimeout(async () => resolve(await clickCheck(task)), SETTINGS.checkDelayAfterReturn);
@@ -441,62 +434,77 @@
             return await waitForReturn(task);
         }
         
-        // НОВАЯ ПАНЕЛЬ: без кнопки настроек, с галочкой автостарта в правом столбце
+        // ========== НОВАЯ ПАНЕЛЬ (ВЕРТИКАЛЬНАЯ, КНОПКИ) ==========
         function createUIPanel() {
             const panel = document.createElement('div');
             panel.className = 'tikbot-panel';
             panel.style.cssText = `
                 position: fixed;
-                bottom: 100px;
+                bottom: 20px;
                 right: 20px;
                 z-index: 9999;
-                background: linear-gradient(135deg, #1a1a2e, #16213e);
-                padding: 10px 12px;
-                border-radius: 12px;
-                color: #eee;
+                background: #1e1e2e;
+                border-radius: 20px;
+                padding: 14px 16px;
+                width: 200px;
+                text-align: left;
                 font-family: monospace;
-                font-size: 11px;
-                min-width: 240px;
+                font-size: 13px;
+                color: #cdd6f4;
+                border: 1px solid #313244;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-                border: 1px solid rgba(255,255,255,0.1);
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
             `;
             panel.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: bold; font-size: 12px;">🤖 TikTokFree Bot</span>
-                    <span id="bot-status" style="background: #f44336; padding: 2px 8px; border-radius: 20px; font-size: 10px;">СТОП</span>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: bold; font-size: 14px;">🤖 TikTokFree Bot v8.14</span>
+                    <span id="bot-status" style="background: #f38ba8; padding: 2px 8px; border-radius: 12px; font-size: 11px;">СТОП</span>
                 </div>
-                <div style="display: flex; gap: 16px; margin-bottom: 8px;">
-                    <div>
-                        <div>💰 <span id="balance">0</span></div>
-                        <div>✅ <span id="completed">0</span></div>
-                        <div>💎 <span id="earned">0.00</span></div>
-                    </div>
-                    <div class="tikbot-right-col" style="flex:1;">
-                        <div id="account-login-place" style="font-size: 10px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px;"></div>
-                        <div style="margin-top: 6px;">
-                            <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 10px; color: #ddd;">
-                                <input type="checkbox" id="auto-start-checkbox" ${CONFIG.autoStart ? 'checked' : ''} style="width: 14px; height: 14px; margin: 0; cursor: pointer;">
-                                <span>✅ автостарт</span>
-                            </label>
-                        </div>
-                    </div>
+                <div>💰 <span id="balance">0</span></div>
+                <div>✅ <span id="completed">0</span></div>
+                <div>💎 <span id="earned">0.00</span></div>
+                <div id="account-login-place" style="color: #89b4fa;">🎭 ---</div>
+                <div style="display: flex; gap: 8px; margin-top: 4px;">
+                    <button id="start-btn" style="flex:1; background:#a6e3a1; border:none; border-radius:8px; padding:6px; cursor:pointer; font-weight:bold; color:#111;">▶ СТАРТ</button>
+                    <button id="stop-btn" style="flex:1; background:#f38ba8; border:none; border-radius:8px; padding:6px; cursor:pointer; font-weight:bold; color:#111;">⏹ СТОП</button>
                 </div>
-                <div style="display: flex; gap: 6px;">
-                    <button id="start-btn" style="flex: 1; padding: 5px; background: #4caf50; border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: bold;">▶ СТАРТ</button>
-                    <button id="stop-btn" style="flex: 1; padding: 5px; background: #f44336; border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: bold;">⏹ СТОП</button>
-                    <button id="reset-stats" style="padding: 5px 10px; background: #ff9800; border: none; border-radius: 6px; cursor: pointer; color: white; font-size: 10px;">🔄</button>
+                <div style="display: flex; gap: 8px;">
+                    <button id="reset-stats" style="flex:1; background:#313244; border:none; border-radius:8px; padding:5px; cursor:pointer; color:#cdd6f4; font-size:11px;">🔄 Сброс</button>
+                    <button id="auto-start-btn" style="flex:1; background:#313244; border:none; border-radius:8px; padding:5px; cursor:pointer; color:#cdd6f4; font-size:11px;">⚙ Автостарт</button>
                 </div>
             `;
             document.body.appendChild(panel);
             
+            function updateAutoStartButton() {
+                const btn = document.getElementById('auto-start-btn');
+                if (btn) {
+                    if (CONFIG.autoStart) {
+                        btn.style.background = '#89b4fa';
+                        btn.style.color = '#1e1e2e';
+                        btn.innerHTML = '✅ Автостарт';
+                    } else {
+                        btn.style.background = '#313244';
+                        btn.style.color = '#cdd6f4';
+                        btn.innerHTML = '⚙ Автостарт';
+                    }
+                }
+            }
+            
             document.getElementById('start-btn').onclick = () => startBot();
             document.getElementById('stop-btn').onclick = () => stopBot();
             document.getElementById('reset-stats').onclick = () => { stats = { completed: 0, earned: 0 }; saveStats(); updateUI(); };
-            document.getElementById('auto-start-checkbox').onchange = (e) => {
-                CONFIG.autoStart = e.target.checked;
+            document.getElementById('auto-start-btn').onclick = () => {
+                CONFIG.autoStart = !CONFIG.autoStart;
                 GM_setValue('autoStart', CONFIG.autoStart);
-                console.log(`⚙️ автостарт: ${CONFIG.autoStart ? 'ВКЛ ✅' : 'ВЫКЛ'}`);
+                updateAutoStartButton();
+                console.log(`⚙️ автостарт: ${CONFIG.autoStart ? 'ВКЛ' : 'ВЫКЛ'}`);
             };
+            
+            updateAutoStartButton();
+            updateAccountLogin();
+            setTimeout(updateAccountLogin, 2000);
         }
         
         function updateUI() {
@@ -506,19 +514,16 @@
             document.getElementById('earned').innerText = stats.earned.toFixed(2);
             const statusEl = document.getElementById('bot-status');
             statusEl.innerText = running ? 'РАБ' : 'СТОП';
-            statusEl.style.background = running ? '#4caf50' : '#f44336';
-            
-            // Обновляем логин
-            const login = getAccountLogin();
-            const loginPlace = document.getElementById('account-login-place');
-            if (loginPlace) loginPlace.innerHTML = login ? `🎭 ${login}` : '🎭 ---';
+            statusEl.style.background = running ? '#a6e3a1' : '#f38ba8';
+            statusEl.style.color = '#111';
+            updateAccountLogin();
         }
         
         async function startBot() {
             if (running) return;
             running = true;
             updateUI();
-            console.log('\n🚀 БОТ ЗАПУЩЕН v8.12');
+            console.log('\n🚀 БОТ ЗАПУЩЕН v8.14');
             let count = 0;
             while (running && count < 100) {
                 const success = await doTask();
