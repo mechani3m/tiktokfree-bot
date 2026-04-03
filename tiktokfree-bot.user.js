@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      8.14.0
+// @version      8.14.1
 // @description  Вертикальная панель, кнопка Автостарт (без галочки)
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
@@ -467,13 +467,11 @@
         <div>✅ <span id="completed">0</span></div>
         <div>💎 <span id="earned">0.00</span></div>
         <div id="account-login-place" style="color: #89b4fa;">🎭 ---</div>
-        <div style="display: flex; gap: 8px; margin-top: 4px;">
-            <button id="start-btn" style="flex:1; background:#a6e3a1; border:none; border-radius:8px; padding:6px; cursor:pointer; font-weight:bold; color:#111;">▶ СТАРТ</button>
-            <button id="stop-btn" style="flex:1; background:#f38ba8; border:none; border-radius:8px; padding:6px; cursor:pointer; font-weight:bold; color:#111;">⏹ СТОП</button>
-        </div>
-        <div style="display: flex; gap: 8px;">
-            <button id="reset-stats" style="flex:1; background:#313244; border:none; border-radius:8px; padding:5px; cursor:pointer; color:#cdd6f4; font-size:11px;">🔄 Сброс</button>
-            <button id="auto-start-btn" style="flex:1; background:#313244; border:none; border-radius:8px; padding:5px; cursor:pointer; color:#cdd6f4; font-size:11px;">⚙ Автостарт</button>
+        <div style="display: flex; gap: 8px; flex-direction: column;">
+            <button id="start-btn" style="width:100%; background:#a6e3a1; border:none; border-radius:8px; padding:8px; cursor:pointer; font-weight:bold; color:#111; font-size:13px;">▶ СТАРТ</button>
+            <button id="stop-btn" style="width:100%; background:#f38ba8; border:none; border-radius:8px; padding:8px; cursor:pointer; font-weight:bold; color:#111; font-size:13px;">⏹ СТОП</button>
+            <button id="reset-stats" style="width:100%; background:#313244; border:none; border-radius:8px; padding:8px; cursor:pointer; font-weight:bold; color:#cdd6f4; font-size:13px;">🔄 Сброс</button>
+            <button id="auto-start-btn" style="width:100%; background:#313244; border:none; border-radius:8px; padding:8px; cursor:pointer; font-weight:bold; color:#cdd6f4; font-size:13px;">⚙ Автостарт</button>
         </div>
     `;
     document.body.appendChild(panel);
