@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTokFree Auto Bot
 // @namespace    https://github.com/mechani3m/tiktokfree-bot
-// @version      8.14.2
+// @version      8.14.3
 // @description  Вертикальная панель, кнопка Автостарт (без галочки)
 // @author       mechani3m
 // @match        https://tiktop-free.com/tasks/*
